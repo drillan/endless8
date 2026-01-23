@@ -50,7 +50,7 @@ result = await engine.run(
         "すべてのテストが通る",
         "カバレッジが80%以上",
     ],
-    max_iterations=30,
+    max_iterations=10,
 )
 
 print(f"完了: {result.success}")
@@ -78,7 +78,7 @@ from pathlib import Path
 result = await engine.run(
     task="大規模リファクタリング",
     completion_criteria=["全テスト通過", "型エラーなし"],
-    persist_history=Path(".endless8/history.json"),
+    persist_history=Path(".e8/history.jsonl"),
 )
 ```
 
@@ -86,13 +86,13 @@ result = await engine.run(
 
 ```bash
 # 基本実行
-endless8 run "タスクの説明" --criteria "条件1" --criteria "条件2"
+e8 run "タスクの説明" --criteria "条件1" --criteria "条件2"
 
 # 設定ファイルから
-endless8 run --config task.yaml
+e8 run --config task.yaml
 
 # 履歴を永続化
-endless8 run "タスク" --persist .endless8/history.json
+e8 run "タスク" --persist .e8/history.jsonl
 ```
 
 ## 特徴
@@ -117,9 +117,10 @@ endless8 run "タスク" --persist .endless8/history.json
 
 - Python 3.13+
 - [claudecode-model](https://github.com/your-org/claudecode-model) - pydantic-ai アダプタ
-- pydantic >= 2.10
-- pydantic-ai >= 1.42
-- typer >= 0.15
+- pydantic >= 2.12
+- pydantic-ai >= 1.46
+- typer >= 0.21
+- duckdb >= 1.4.3
 
 ## ライセンス
 
