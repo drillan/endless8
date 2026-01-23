@@ -1,0 +1,10 @@
+# リサーチタスクの設定ファイル例
+# 使用方法: e8 run --config examples/research.yaml
+
+task: "プロンプトエンジニアリングの最新手法を調査"
+criteria:
+  - "3件以上の関連論文または記事を発見"
+  - "各手法の概要と利点・欠点をまとめる"
+  - "調査結果をmarkdownファイルに出力"
+
+max_iterations: 8

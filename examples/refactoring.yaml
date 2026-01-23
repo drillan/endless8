@@ -1,0 +1,17 @@
+# リファクタリングタスクの設定ファイル例
+# 使用方法: e8 run --config examples/refactoring.yaml
+
+task: "レガシーコードをリファクタリングする"
+criteria:
+  - "すべての既存テストがパスする"
+  - "重複コードを関数に抽出"
+  - "型アノテーションを追加"
+  - "ruff check と mypy がエラーなしでパス"
+
+max_iterations: 15
+
+# 大規模リファクタリングは履歴を保存して中断可能に
+persist: ".e8/history.jsonl"
+
+# 過去の失敗から学ぶため履歴参照を多めに
+history_context_size: 10

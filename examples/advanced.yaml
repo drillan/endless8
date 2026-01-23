@@ -1,0 +1,48 @@
+# 詳細設定を含む設定ファイル例
+# 使用方法: e8 run --config examples/advanced.yaml
+
+task: "認証機能を実装する"
+criteria:
+  - "ログイン機能が動作する"
+  - "ログアウト機能が動作する"
+  - "不正なパスワードでエラーになる"
+  - "すべてのテストがパスする"
+
+max_iterations: 20
+
+# 履歴の永続化（中断からの再開が可能に）
+persist: ".e8/history.jsonl"
+
+# ナレッジファイルパス
+knowledge: ".e8/knowledge.jsonl"
+
+# 履歴参照件数（コンテキスト効率化）
+history_context_size: 5
+
+# ロギングオプション
+logging:
+  raw_log: true
+  raw_log_dir: ".e8/logs"
+
+# claude CLI オプション
+claude_options:
+  allowed_tools:
+    - "Read"
+    - "Edit"
+    - "Write"
+    - "Bash(git:*)"
+    - "Bash(pytest:*)"
+  model: "sonnet"
+  output_format: "stream-json"
+  verbose: true
+
+# プロンプトカスタマイズ
+prompts:
+  judgment: |
+    以下の基準で完了条件を厳密に評価してください：
+    - テストが実際に実行され、すべてパスしていること
+    - エラーログや警告がないこと
+    - セキュリティ上の問題がないこと
+  append_system_prompt: |
+    各作業の最後に、以下のJSON形式で報告してください：
+    {"strategy_tags": ["タグ"], "approach": "アプローチ", "discoveries": ["発見"]}
