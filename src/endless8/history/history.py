@@ -8,7 +8,13 @@ import json
 import logging
 from pathlib import Path
 
-from endless8.models import ExecutionStatus, ExecutionSummary, SummaryMetadata
+from endless8.models import (
+    ExecutionStatus,
+    ExecutionSummary,
+    JudgmentResult,
+    LoopResult,
+    SummaryMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +111,12 @@ class History:
             "timestamp": summary.timestamp,
         }
 
-        with self._path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        try:
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:
+            logger.error("Failed to write to history file %s: %s", self._path, e)
+            raise
 
     async def get_recent(self, limit: int = 5) -> list[ExecutionSummary]:
         """Get recent execution summaries.
@@ -181,6 +191,89 @@ class History:
         if not self._summaries:
             return 0
         return self._summaries[-1].iteration
+
+    async def append_judgment(self, judgment: JudgmentResult, iteration: int) -> None:
+        """Append a judgment result to history.
+
+        Args:
+            judgment: The judgment result to append.
+            iteration: The iteration number when this judgment was made.
+        """
+        self._ensure_directory()
+
+        # Serialize evaluations
+        evaluations = [
+            {
+                "criterion": e.criterion,
+                "is_met": e.is_met,
+                "evidence": e.evidence,
+                "confidence": e.confidence,
+            }
+            for e in judgment.evaluations
+        ]
+
+        record = {
+            "type": "judgment",
+            "iteration": iteration,
+            "is_complete": judgment.is_complete,
+            "evaluations": evaluations,
+            "overall_reason": judgment.overall_reason,
+            "suggested_next_action": judgment.suggested_next_action,
+        }
+
+        try:
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:
+            logger.error(
+                "Failed to write judgment to history file %s: %s", self._path, e
+            )
+            raise
+
+    async def append_final_result(self, result: LoopResult) -> None:
+        """Append a final result to history.
+
+        Args:
+            result: The loop result to append.
+        """
+        self._ensure_directory()
+
+        # Serialize final judgment if present
+        final_judgment_data = None
+        if result.final_judgment:
+            evaluations = [
+                {
+                    "criterion": e.criterion,
+                    "is_met": e.is_met,
+                    "evidence": e.evidence,
+                    "confidence": e.confidence,
+                }
+                for e in result.final_judgment.evaluations
+            ]
+            final_judgment_data = {
+                "is_complete": result.final_judgment.is_complete,
+                "evaluations": evaluations,
+                "overall_reason": result.final_judgment.overall_reason,
+                "suggested_next_action": result.final_judgment.suggested_next_action,
+            }
+
+        record = {
+            "type": "final_result",
+            "status": result.status.value,
+            "iterations_used": result.iterations_used,
+            "final_judgment": final_judgment_data,
+            "history_path": result.history_path,
+            "error_message": result.error_message,
+        }
+
+        try:
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:
+            logger.error(
+                "Failed to write final result to history file %s: %s", self._path, e
+            )
+            raise
 
 
 __all__ = ["History"]

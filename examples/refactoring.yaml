@@ -11,7 +11,7 @@ criteria:
 max_iterations: 15
 
 # 大規模リファクタリングは履歴を保存して中断可能に
-persist: ".e8/history.jsonl"
+persist: true
 
 # 過去の失敗から学ぶため履歴参照を多めに
 history_context_size: 10

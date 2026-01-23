@@ -290,7 +290,7 @@ class History:
         ...
 ```
 
-**Storage**: `.e8/history.jsonl`
+**Storage**: `.e8/tasks/<task-id>/history.jsonl`
 
 ---
 
@@ -417,7 +417,90 @@ class EngineConfig(BaseModel):
 
 | データ | ファイル | 形式 | スコープ |
 |--------|----------|------|----------|
-| 履歴 | `.e8/history.jsonl` | JSONL | タスク単位 |
+| 履歴 | `.e8/tasks/<task-id>/history.jsonl` | JSONL | タスク単位 |
 | ナレッジ | `.e8/knowledge.jsonl` | JSONL | プロジェクト単位 |
-| 生ログ | `.e8/logs/iteration-NNN.jsonl` | JSONL | イテレーション単位 |
+| 生ログ | `.e8/tasks/<task-id>/logs/iteration-NNN.jsonl` | JSONL | イテレーション単位 |
 | 設定 | `task.yaml` | YAML | タスク単位 |
+
+### Task Directory Structure
+
+```
+.e8/
+├── knowledge.jsonl              # プロジェクト単位のナレッジ
+└── tasks/
+    ├── 2026-01-23T10-00-00/     # タスクID（タイムスタンプ形式）
+    │   ├── history.jsonl        # タスクの履歴
+    │   └── logs/                # オプション: 生ログ
+    │       ├── iteration-001.jsonl
+    │       └── iteration-002.jsonl
+    └── 2026-01-23T13-30-00/     # 別のタスク
+        ├── history.jsonl
+        └── logs/
+```
+
+---
+
+## Progress Callback
+
+### 11. ProgressEvent
+
+進捗通知イベントを表す。
+
+```python
+from enum import Enum
+from datetime import datetime
+
+class ProgressEventType(str, Enum):
+    """進捗イベントタイプ"""
+    ITERATION_START = "iteration_start"   # イテレーション開始
+    ITERATION_END = "iteration_end"       # イテレーション終了
+    TASK_START = "task_start"             # タスク開始
+    TASK_END = "task_end"                 # タスク終了
+    INTAKE_COMPLETE = "intake_complete"   # 受付完了
+    EXECUTION_COMPLETE = "execution_complete"  # 実行完了
+    JUDGMENT_COMPLETE = "judgment_complete"    # 判定完了
+
+class ProgressEvent(BaseModel):
+    """進捗イベント"""
+    event_type: ProgressEventType
+    iteration: int | None = Field(None, description="イテレーション番号")
+    message: str = Field(..., description="進捗メッセージ")
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    data: dict | None = Field(None, description="追加データ")
+```
+
+### Progress Callback Type
+
+```python
+from typing import Callable, Awaitable
+
+# 同期コールバック
+ProgressCallback = Callable[[ProgressEvent], None]
+
+# 非同期コールバック
+AsyncProgressCallback = Callable[[ProgressEvent], Awaitable[None]]
+
+# Engine.run() のシグネチャ
+async def run(
+    self,
+    task_input: TaskInput,
+    on_progress: ProgressCallback | AsyncProgressCallback | None = None
+) -> LoopResult:
+    ...
+```
+
+### Usage Example
+
+```python
+def print_progress(event: ProgressEvent) -> None:
+    """進捗を表示するコールバック"""
+    if event.event_type == ProgressEventType.ITERATION_START:
+        print(f"[Iteration {event.iteration}] 開始...")
+    elif event.event_type == ProgressEventType.ITERATION_END:
+        print(f"[Iteration {event.iteration}] 完了")
+    elif event.event_type == ProgressEventType.TASK_END:
+        print(f"タスク完了: {event.message}")
+
+# Engine.run() に渡す
+result = await engine.run(task_input, on_progress=print_progress)
+```

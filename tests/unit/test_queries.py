@@ -134,8 +134,12 @@ class TestQueryHistoryContext:
         summaries = query_history_context(valid_history_jsonl, limit=5)
 
         # Check status parsing
-        success_summaries = [s for s in summaries if s.result == ExecutionStatus.SUCCESS]
-        failure_summaries = [s for s in summaries if s.result == ExecutionStatus.FAILURE]
+        success_summaries = [
+            s for s in summaries if s.result == ExecutionStatus.SUCCESS
+        ]
+        failure_summaries = [
+            s for s in summaries if s.result == ExecutionStatus.FAILURE
+        ]
 
         assert len(success_summaries) == 3
         assert len(failure_summaries) == 2

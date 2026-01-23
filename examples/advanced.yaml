@@ -10,8 +10,8 @@ criteria:
 
 max_iterations: 20
 
-# 履歴の永続化（中断からの再開が可能に）
-persist: ".e8/history.jsonl"
+# 履歴の永続化（タスクディレクトリに自動保存）
+persist: true
 
 # ナレッジファイルパス
 knowledge: ".e8/knowledge.jsonl"
@@ -22,7 +22,7 @@ history_context_size: 5
 # ロギングオプション
 logging:
   raw_log: true
-  raw_log_dir: ".e8/logs"
+  # raw_log_dir: デフォルトでタスクディレクトリ内に保存
 
 # claude CLI オプション
 claude_options:

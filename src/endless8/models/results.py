@@ -43,6 +43,10 @@ class IntakeResult(BaseModel):
     )
     rejection_reason: str | None = Field(None, description="却下理由（REJECTED時のみ）")
     validation_notes: str | None = Field(None, description="検証時の注記")
+    suggested_tools: list[str] = Field(
+        default_factory=list,
+        description="タスク実行に推奨されるツール",
+    )
 
 
 class SemanticMetadata(BaseModel):

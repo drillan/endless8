@@ -136,3 +136,65 @@ class TestExecutionAgent:
             # Verify the agent was called (context is passed to the model)
             assert mock_agent.run.called
             assert result.status == ExecutionStatus.SUCCESS
+
+    async def test_execution_agent_passes_allowed_tools(
+        self,
+        execution_context: ExecutionContext,
+    ) -> None:
+        """Test that execution agent passes allowed_tools to model factory."""
+        from endless8.agents.execution import ExecutionAgent
+
+        allowed_tools = ["Read", "Edit", "Write", "Bash"]
+
+        with (
+            patch("endless8.agents.execution.Agent") as mock_agent_class,
+            patch("endless8.agents.execution.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=ExecutionResult(
+                    status=ExecutionStatus.SUCCESS,
+                    output="完了",
+                    artifacts=[],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = ExecutionAgent(allowed_tools=allowed_tools)
+            await agent.run(execution_context)
+
+            # Verify create_agent_model was called with allowed_tools
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("allowed_tools") == allowed_tools
+
+    async def test_execution_agent_without_allowed_tools(
+        self,
+        execution_context: ExecutionContext,
+    ) -> None:
+        """Test that execution agent works without allowed_tools."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with (
+            patch("endless8.agents.execution.Agent") as mock_agent_class,
+            patch("endless8.agents.execution.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=ExecutionResult(
+                    status=ExecutionStatus.SUCCESS,
+                    output="完了",
+                    artifacts=[],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = ExecutionAgent()  # No allowed_tools
+            await agent.run(execution_context)
+
+            # Verify create_agent_model was called without allowed_tools or with None
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("allowed_tools") is None

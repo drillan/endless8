@@ -13,6 +13,12 @@ class ClaudeOptions(BaseModel):
     model: str = Field(default="sonnet", description="使用するモデル")
     output_format: str = Field(default="stream-json", description="出力形式")
     verbose: bool = Field(default=True, description="詳細出力")
+    timeout: float = Field(
+        default=300.0,
+        ge=30.0,
+        le=3600.0,
+        description="SDK クエリのタイムアウト（秒）",
+    )
 
 
 class LoggingOptions(BaseModel):
@@ -50,6 +56,9 @@ class EngineConfig(BaseModel):
     )
     history_context_size: int = Field(
         default=5, ge=1, le=20, description="履歴参照件数"
+    )
+    knowledge_context_size: int = Field(
+        default=10, ge=1, le=50, description="ナレッジ参照件数"
     )
     logging: LoggingOptions = Field(default_factory=LoggingOptions)
     claude_options: ClaudeOptions = Field(default_factory=ClaudeOptions)

@@ -34,14 +34,15 @@ e8 run --config examples/basic.yaml --max-iterations 20
 ### オプション
 
 - `max_iterations`: 最大イテレーション数（デフォルト: 10）
-- `persist`: 履歴ファイルパス（中断からの再開に必要）
+- `persist`: 履歴の永続化（true/false、デフォルト: false）
+  - true の場合、タスクディレクトリに自動保存
 - `knowledge`: ナレッジファイルパス（デフォルト: `.e8/knowledge.jsonl`）
 - `history_context_size`: 参照する履歴件数（デフォルト: 5）
 
 ### ロギング（`logging`）
 
 - `raw_log`: 生ログを保存するか（デフォルト: false）
-- `raw_log_dir`: 生ログ保存先（デフォルト: `.e8/logs`）
+- `raw_log_dir`: 生ログ保存先（省略時はタスクディレクトリ内）
 
 ### Claude CLI オプション（`claude_options`）
 

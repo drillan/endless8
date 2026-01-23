@@ -143,6 +143,8 @@
 - **FR-029**: CLIは `--resume` オプションで最新タスクを再開、`--resume <task-id>` で特定タスクを再開できなければならない
 - **FR-030**: システムはタスクごとにディレクトリを作成し、履歴と生ログをタスク単位で分離しなければならない（`.e8/tasks/<task-id>/`）
 - **FR-031**: CLIは `e8 list` コマンドでタスク一覧を表示できなければならない
+- **FR-032**: システムは各イテレーション終了時に判定結果（JudgmentResult）を history.jsonl に `type: "judgment"` として即座に保存しなければならない
+- **FR-033**: システムはタスク終了時（completed, max_iterations, error, cancelled のいずれの場合も）に最終結果（LoopResult）を history.jsonl に `type: "final_result"` として保存しなければならない
 
 ### Key Entities
 
@@ -215,6 +217,42 @@
     "partial_progress": "認証機能の実装完了",
     "pending_items": ["カバレッジ確認"]
   }
+}
+```
+
+### JudgmentResult構造（履歴保存用）
+
+```json
+{
+  "type": "judgment",
+  "iteration": 3,
+  "is_complete": false,
+  "evaluations": [
+    {
+      "criterion": "pytest --cov で90%以上",
+      "is_met": false,
+      "evidence": "現在のカバレッジは85%",
+      "confidence": 0.95
+    }
+  ],
+  "overall_reason": "カバレッジが目標に達していない",
+  "suggested_next_action": "未カバーの関数にテストを追加",
+  "timestamp": "2026-01-23T10:05:00Z"
+}
+```
+
+### LoopResult構造（最終結果）
+
+```json
+{
+  "type": "final_result",
+  "status": "completed",
+  "iterations_used": 3,
+  "final_judgment": {
+    "is_complete": true,
+    "overall_reason": "すべての完了条件を満たした"
+  },
+  "timestamp": "2026-01-23T10:10:00Z"
 }
 ```
 
@@ -401,3 +439,7 @@ prompts:
 - Q: タスク完了時の CLI 表示内容は？ → A: ステータス + 判定理由 + 成果物リスト
 - Q: 古いタスクディレクトリのクリーンアップ方法は？ → A: 手動削除のみ（MVP では CLI コマンドなし）
 - Q: タスク一覧表示機能は？ → A: `e8 list` コマンドでタスク一覧を表示
+- Q: 実行中の進捗通知方式は？ → A: コールバック方式（Engine.run() に on_progress コールバックを渡す）
+- Q: history.jsonl に保存するレコードタイプは？ → A: ExecutionSummary + JudgmentResult + LoopResult（最終結果）の3種類
+- Q: JudgmentResult の保存タイミングは？ → A: 毎イテレーション終了時（判定完了後に即座に保存）
+- Q: LoopResult の保存条件は？ → A: すべての終了ケース（completed, max_iterations, error, cancelled）で保存
