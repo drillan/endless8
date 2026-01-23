@@ -1,7 +1,7 @@
 [project]
 name = "endless8"
 version = "0.1.0"
-description = "Add your description here"
+description = "pydantic-ai と claudecode-model を使用したコンテキスト効率の良いタスク実行ループエンジン"
 readme = "README.md"
 authors = [
     { name = "driller", email = "eleshis@gmail.com" }
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-endless8 = "endless8:main"
+e8 = "endless8:main"
 
 [build-system]
 requires = ["uv_build>=0.9.24,<0.10.0"]
