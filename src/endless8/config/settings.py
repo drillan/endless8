@@ -37,6 +37,10 @@ class EngineConfig(BaseModel):
 
     task: str = Field(..., description="タスクの説明")
     criteria: list[str] = Field(..., min_length=1, description="完了条件")
+    agent_model: str = Field(
+        default="anthropic:claude-sonnet-4-5",
+        description="エージェントが使用するモデル",
+    )
     max_iterations: int = Field(
         default=10, ge=1, le=100, description="最大イテレーション数"
     )

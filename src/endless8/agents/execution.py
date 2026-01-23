@@ -9,14 +9,8 @@ The Execution Agent is responsible for:
 from pydantic_ai import Agent
 
 from endless8.agents import ExecutionContext
+from endless8.agents.model_factory import create_agent_model
 from endless8.models import ExecutionResult
-
-# Import claudecode-model adapter
-try:
-    from claudecode_model import ClaudeCodeModel
-except ImportError:
-    ClaudeCodeModel = None  # type: ignore[assignment, misc]
-
 
 EXECUTION_SYSTEM_PROMPT = """あなたはタスク実行エージェントです。
 
@@ -49,13 +43,19 @@ EXECUTION_SYSTEM_PROMPT = """あなたはタスク実行エージェントです
 class ExecutionAgent:
     """Execution Agent for running tasks with claudecode-model."""
 
-    def __init__(self, append_system_prompt: str | None = None) -> None:
+    def __init__(
+        self,
+        append_system_prompt: str | None = None,
+        model_name: str = "anthropic:claude-sonnet-4-5",
+    ) -> None:
         """Initialize the execution agent.
 
         Args:
             append_system_prompt: Additional system prompt to append.
+            model_name: Name of the model to use for the agent.
         """
         self._append_system_prompt = append_system_prompt
+        self._model_name = model_name
 
     def _build_prompt(self, context: ExecutionContext) -> str:
         """Build the execution prompt from context.
@@ -96,11 +96,7 @@ class ExecutionAgent:
         if self._append_system_prompt:
             system_prompt += f"\n\n{self._append_system_prompt}"
 
-        # Use ClaudeCodeModel if available, otherwise use default anthropic model
-        if ClaudeCodeModel is not None:
-            model = ClaudeCodeModel(max_turns=50)
-        else:
-            model = "anthropic:claude-sonnet-4-5"
+        model = create_agent_model(self._model_name, max_turns=50)
 
         agent: Agent[None, ExecutionResult] = Agent(
             model,

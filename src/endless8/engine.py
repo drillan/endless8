@@ -7,6 +7,8 @@ The Engine coordinates the 4 agents:
 4. Judgment Agent: Evaluates completion
 """
 
+import logging
+import traceback
 from collections.abc import AsyncIterator
 from typing import Protocol
 
@@ -23,6 +25,8 @@ from endless8.models import (
     LoopStatus,
     TaskInput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class IntakeAgentProtocol(Protocol):
@@ -244,10 +248,16 @@ class Engine:
 
         except Exception as e:
             self._is_running = False
+            stack_trace = traceback.format_exc()
+            logger.exception(
+                "Engine execution failed at iteration %d: %s",
+                self._current_iteration,
+                e,
+            )
             return LoopResult(
                 status=LoopStatus.ERROR,
                 iterations_used=self._current_iteration,
-                error_message=str(e),
+                error_message=f"{e}\n\nStack trace:\n{stack_trace}",
             )
 
     async def run_iter(self, task_input: TaskInput) -> AsyncIterator[ExecutionSummary]:

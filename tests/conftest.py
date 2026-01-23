@@ -1,9 +1,20 @@
 """Pytest fixtures for endless8 tests."""
 
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import pytest
+
+from endless8.models import (
+    ExecutionStatus,
+    ExecutionSummary,
+    Knowledge,
+    KnowledgeConfidence,
+    KnowledgeType,
+    NextAction,
+    SummaryMetadata,
+    TaskInput,
+)
 
 
 @pytest.fixture
@@ -33,53 +44,53 @@ def knowledge_path(e8_dir: Path) -> Path:
 
 
 @pytest.fixture
-def sample_task() -> dict[str, Any]:
+def sample_task() -> TaskInput:
     """Provide a sample task input."""
-    return {
-        "task": "テストカバレッジを90%以上にする",
-        "criteria": ["pytest --cov で90%以上"],
-        "max_iterations": 10,
-        "history_context_size": 5,
-    }
+    return TaskInput(
+        task="テストカバレッジを90%以上にする",
+        criteria=["pytest --cov で90%以上"],
+        max_iterations=10,
+        history_context_size=5,
+    )
 
 
 @pytest.fixture
-def sample_execution_summary() -> dict[str, Any]:
+def sample_execution_summary() -> ExecutionSummary:
     """Provide a sample execution summary."""
-    return {
-        "type": "summary",
-        "iteration": 1,
-        "approach": "テストを追加",
-        "result": "success",
-        "reason": "テストファイル作成完了",
-        "artifacts": ["tests/test_main.py"],
-        "metadata": {
-            "tools_used": ["Read", "Edit", "Bash(pytest)"],
-            "files_modified": ["src/main.py"],
-            "error_type": None,
-            "tokens_used": 15000,
-            "strategy_tags": ["test-fix"],
-        },
-        "next": {
-            "suggested_action": "カバレッジを確認",
-            "blockers": [],
-            "partial_progress": "認証機能の実装完了",
-            "pending_items": ["カバレッジ確認"],
-        },
-        "timestamp": "2026-01-23T10:00:00Z",
-    }
+    return ExecutionSummary(
+        type="summary",
+        iteration=1,
+        approach="テストを追加",
+        result=ExecutionStatus.SUCCESS,
+        reason="テストファイル作成完了",
+        artifacts=["tests/test_main.py"],
+        metadata=SummaryMetadata(
+            tools_used=["Read", "Edit", "Bash(pytest)"],
+            files_modified=["src/main.py"],
+            error_type=None,
+            tokens_used=15000,
+            strategy_tags=["test-fix"],
+        ),
+        next=NextAction(
+            suggested_action="カバレッジを確認",
+            blockers=[],
+            partial_progress="認証機能の実装完了",
+            pending_items=["カバレッジ確認"],
+        ),
+        timestamp="2026-01-23T10:00:00Z",
+    )
 
 
 @pytest.fixture
-def sample_knowledge() -> dict[str, Any]:
+def sample_knowledge() -> Knowledge:
     """Provide a sample knowledge entry."""
-    return {
-        "type": "pattern",
-        "category": "testing",
-        "content": "テストは tests/ ディレクトリに配置",
-        "example_file": "tests/test_main.py",
-        "source_task": "テストカバレッジ向上",
-        "confidence": "high",
-        "applied_count": 0,
-        "created_at": "2026-01-23T10:00:00Z",
-    }
+    return Knowledge(
+        type=KnowledgeType.PATTERN,
+        category="testing",
+        content="テストは tests/ ディレクトリに配置",
+        example_file="tests/test_main.py",
+        source_task="テストカバレッジ向上",
+        confidence=KnowledgeConfidence.HIGH,
+        applied_count=0,
+        created_at=datetime(2026, 1, 23, 10, 0, 0, tzinfo=UTC),
+    )

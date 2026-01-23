@@ -8,13 +8,8 @@ The Intake Agent is responsible for:
 
 from pydantic_ai import Agent
 
+from endless8.agents.model_factory import create_agent_model
 from endless8.models import IntakeResult
-
-# Import claudecode-model adapter
-try:
-    from claudecode_model import ClaudeCodeModel
-except ImportError:
-    ClaudeCodeModel = None  # type: ignore[assignment, misc]
 
 DEFAULT_INTAKE_PROMPT = """あなたは受付エージェントです。
 
@@ -53,9 +48,13 @@ rejection_reason: 却下理由（却下の場合のみ）
 class IntakeAgent:
     """Intake Agent for validating task and criteria."""
 
-    def __init__(self) -> None:
-        """Initialize the intake agent."""
-        pass
+    def __init__(self, model_name: str = "anthropic:claude-sonnet-4-5") -> None:
+        """Initialize the intake agent.
+
+        Args:
+            model_name: Name of the model to use for the agent.
+        """
+        self._model_name = model_name
 
     def _build_prompt(
         self,
@@ -112,11 +111,7 @@ class IntakeAgent:
         Returns:
             IntakeResult with validation status and any clarification questions.
         """
-        # Use ClaudeCodeModel if available, otherwise use default anthropic model
-        if ClaudeCodeModel is not None:
-            model = ClaudeCodeModel(max_turns=10)
-        else:
-            model = "anthropic:claude-sonnet-4-5"
+        model = create_agent_model(self._model_name, max_turns=10)
 
         agent: Agent[None, IntakeResult] = Agent(
             model,

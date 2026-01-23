@@ -1,8 +1,9 @@
 """Result models for endless8."""
 
 from enum import Enum
+from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class IntakeStatus(str, Enum):
@@ -85,6 +86,13 @@ class JudgmentResult(BaseModel):
         None, description="未完了時の次のアクション提案"
     )
 
+    @model_validator(mode="after")
+    def validate_consistency(self) -> Self:
+        """Validate consistency between is_complete and evaluations."""
+        if self.is_complete and not all(e.is_met for e in self.evaluations):
+            raise ValueError("is_complete=True but not all criteria are met")
+        return self
+
 
 class LoopResult(BaseModel):
     """ループ全体の最終結果。"""
@@ -97,3 +105,12 @@ class LoopResult(BaseModel):
     )
     history_path: str | None = Field(None, description="履歴ファイルのパス")
     error_message: str | None = Field(None, description="エラーメッセージ（ERROR時）")
+
+    @model_validator(mode="after")
+    def validate_status_fields(self) -> Self:
+        """Validate status-dependent required fields."""
+        if self.status == LoopStatus.ERROR and not self.error_message:
+            raise ValueError("error_message required when status is ERROR")
+        if self.status == LoopStatus.COMPLETED and not self.final_judgment:
+            raise ValueError("final_judgment required when status is COMPLETED")
+        return self

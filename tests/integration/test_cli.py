@@ -145,3 +145,89 @@ class TestCLI:
         result = runner.invoke(app, ["--version"])
         # Should show version info
         assert result.exit_code == 0 or "version" in result.stdout.lower()
+
+    def test_cli_run_with_missing_config_file(
+        self,
+        runner: CliRunner,
+        temp_project_dir: Path,
+    ) -> None:
+        """Test that run command fails gracefully when config file is missing."""
+        from endless8.cli.main import app
+
+        nonexistent_config = temp_project_dir / "nonexistent.yaml"
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--config",
+                str(nonexistent_config),
+                "--project",
+                str(temp_project_dir),
+            ],
+        )
+
+        assert result.exit_code == 1
+        # Error message goes to stderr, combined in output
+        output = result.output
+        assert "見つかりません" in output or "not found" in output.lower()
+
+    def test_cli_run_with_invalid_yaml_config(
+        self,
+        runner: CliRunner,
+        temp_project_dir: Path,
+    ) -> None:
+        """Test that run command fails gracefully when config YAML is invalid."""
+        from endless8.cli.main import app
+
+        # Create config file with invalid YAML content (not a dict)
+        invalid_config = temp_project_dir / "invalid.yaml"
+        invalid_config.write_text("- this is a list\n- not a dict")
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--config",
+                str(invalid_config),
+                "--project",
+                str(temp_project_dir),
+            ],
+        )
+
+        assert result.exit_code == 1
+        # Error message goes to stderr, combined in output
+        output = result.output
+        assert "不正" in output or "invalid" in output.lower()
+
+    def test_cli_run_with_malformed_yaml_config(
+        self,
+        runner: CliRunner,
+        temp_project_dir: Path,
+    ) -> None:
+        """Test that run command fails gracefully when config YAML is malformed."""
+        from endless8.cli.main import app
+
+        # Create config file with missing required fields
+        malformed_config = temp_project_dir / "malformed.yaml"
+        malformed_config.write_text(
+            "# Missing required 'task' and 'criteria' fields\n"
+            "max_iterations: 5\n"
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--config",
+                str(malformed_config),
+                "--project",
+                str(temp_project_dir),
+            ],
+        )
+
+        assert result.exit_code == 1
+        # Should show validation error for missing required fields
+        # Error message goes to stderr, combined in output
+        output = result.output
+        assert "不正" in output or "invalid" in output.lower()

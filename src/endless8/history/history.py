@@ -5,9 +5,12 @@ with DuckDB-powered queries for efficient context generation.
 """
 
 import json
+import logging
 from pathlib import Path
 
 from endless8.models import ExecutionStatus, ExecutionSummary, SummaryMetadata
+
+logger = logging.getLogger(__name__)
 
 
 class History:
@@ -36,11 +39,20 @@ class History:
             return
 
         with self._path.open("r", encoding="utf-8") as f:
-            for line in f:
+            for line_num, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
                     continue
-                data = json.loads(line)
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "Invalid JSON line skipped at %s:%d: %s",
+                        self._path,
+                        line_num,
+                        e,
+                    )
+                    continue
                 # Only load summary records
                 if data.get("type") == "summary":
                     summary = ExecutionSummary(

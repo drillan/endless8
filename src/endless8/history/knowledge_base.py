@@ -5,9 +5,12 @@ with filtering by type and tags.
 """
 
 import json
+import logging
 from pathlib import Path
 
 from endless8.models import Knowledge, KnowledgeConfidence, KnowledgeType
+
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeBase:
@@ -35,11 +38,20 @@ class KnowledgeBase:
             return
 
         with self._path.open("r", encoding="utf-8") as f:
-            for line in f:
+            for line_num, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
                     continue
-                data = json.loads(line)
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "Invalid JSON line skipped at %s:%d: %s",
+                        self._path,
+                        line_num,
+                        e,
+                    )
+                    continue
                 knowledge = Knowledge(
                     type=KnowledgeType(data["type"]),
                     category=data["category"],

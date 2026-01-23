@@ -9,13 +9,8 @@ The Judgment Agent is responsible for:
 from pydantic_ai import Agent
 
 from endless8.agents import JudgmentContext
+from endless8.agents.model_factory import create_agent_model
 from endless8.models import JudgmentResult
-
-# Import claudecode-model adapter
-try:
-    from claudecode_model import ClaudeCodeModel
-except ImportError:
-    ClaudeCodeModel = None  # type: ignore[assignment, misc]
 
 DEFAULT_JUDGMENT_PROMPT = """あなたは判定エージェントです。
 
@@ -49,8 +44,13 @@ DEFAULT_JUDGMENT_PROMPT = """あなたは判定エージェントです。
 class JudgmentAgent:
     """Judgment Agent for evaluating completion criteria."""
 
-    def __init__(self) -> None:
-        """Initialize the judgment agent."""
+    def __init__(self, model_name: str = "anthropic:claude-sonnet-4-5") -> None:
+        """Initialize the judgment agent.
+
+        Args:
+            model_name: Name of the model to use for the agent.
+        """
+        self._model_name = model_name
         self._agent: Agent[None, JudgmentResult] | None = None
 
     def _build_prompt(self, context: JudgmentContext) -> str:
@@ -98,11 +98,7 @@ class JudgmentAgent:
         # Use custom prompt if provided
         system_prompt = context.custom_prompt or DEFAULT_JUDGMENT_PROMPT
 
-        # Use ClaudeCodeModel if available, otherwise use default anthropic model
-        if ClaudeCodeModel is not None:
-            model = ClaudeCodeModel(max_turns=10)
-        else:
-            model = "anthropic:claude-sonnet-4-5"
+        model = create_agent_model(self._model_name, max_turns=10)
 
         agent: Agent[None, JudgmentResult] = Agent(
             model,

@@ -3,11 +3,16 @@
 Provides functions to query JSONL history and knowledge files.
 """
 
+import logging
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
+from duckdb import Error as DuckDBError
 
 from endless8.models import ExecutionStatus, ExecutionSummary
+
+logger = logging.getLogger(__name__)
 
 
 def query_history_context(
@@ -47,17 +52,26 @@ def query_history_context(
         summaries = []
         for row in result:
             iteration, approach, result_status, reason, artifacts, timestamp = row
+            # Convert datetime to ISO string if needed
+            if isinstance(timestamp, datetime):
+                timestamp_str = timestamp.isoformat()
+            else:
+                timestamp_str = str(timestamp) if timestamp else ""
             summary = ExecutionSummary(
                 iteration=iteration,
                 approach=approach,
                 result=ExecutionStatus(result_status),
                 reason=reason,
                 artifacts=artifacts if artifacts else [],
-                timestamp=timestamp,
+                timestamp=timestamp_str,
             )
             summaries.append(summary)
         return summaries
-    except Exception:
+    except DuckDBError as e:
+        logger.warning("DuckDB query failed in query_history_context: %s", e)
+        return []
+    except Exception as e:
+        logger.warning("Unexpected error in query_history_context: %s", e)
         return []
 
 
@@ -79,36 +93,57 @@ def query_failures(
         return []
 
     exclude = exclude_iterations or []
-    placeholders = ",".join(["?"] * len(exclude)) if exclude else "NULL"
 
-    query = f"""
-    SELECT iteration, approach, result, reason, artifacts, timestamp
-    FROM read_ndjson_auto(?)
-    WHERE type = 'summary'
-      AND result = 'failure'
-      AND iteration NOT IN ({placeholders})
-    ORDER BY iteration DESC
-    LIMIT 5
-    """
-
-    try:
+    # Build query with optional NOT IN clause
+    if exclude:
+        placeholders = ",".join(["?"] * len(exclude))
+        query = f"""
+        SELECT iteration, approach, result, reason, artifacts, timestamp
+        FROM read_ndjson_auto(?)
+        WHERE type = 'summary'
+          AND result = 'failure'
+          AND iteration NOT IN ({placeholders})
+        ORDER BY iteration DESC
+        LIMIT 5
+        """
         params: list[str | int] = [str(path)]
         params.extend(exclude)
+    else:
+        query = """
+        SELECT iteration, approach, result, reason, artifacts, timestamp
+        FROM read_ndjson_auto(?)
+        WHERE type = 'summary'
+          AND result = 'failure'
+        ORDER BY iteration DESC
+        LIMIT 5
+        """
+        params = [str(path)]
+
+    try:
         result = duckdb.execute(query, params).fetchall()
         summaries = []
         for row in result:
             iteration, approach, result_status, reason, artifacts, timestamp = row
+            # Convert datetime to ISO string if needed
+            if isinstance(timestamp, datetime):
+                timestamp_str = timestamp.isoformat()
+            else:
+                timestamp_str = str(timestamp) if timestamp else ""
             summary = ExecutionSummary(
                 iteration=iteration,
                 approach=approach,
                 result=ExecutionStatus(result_status),
                 reason=reason,
                 artifacts=artifacts if artifacts else [],
-                timestamp=timestamp,
+                timestamp=timestamp_str,
             )
             summaries.append(summary)
         return summaries
-    except Exception:
+    except DuckDBError as e:
+        logger.warning("DuckDB query failed in query_failures: %s", e)
+        return []
+    except Exception as e:
+        logger.warning("Unexpected error in query_failures: %s", e)
         return []
 
 
@@ -134,7 +169,11 @@ def count_iterations(history_path: str | Path) -> int:
     try:
         result = duckdb.execute(query, [str(path)]).fetchone()
         return result[0] if result else 0
-    except Exception:
+    except DuckDBError as e:
+        logger.warning("DuckDB query failed in count_iterations: %s", e)
+        return 0
+    except Exception as e:
+        logger.warning("Unexpected error in count_iterations: %s", e)
         return 0
 
 
@@ -160,7 +199,11 @@ def get_last_iteration(history_path: str | Path) -> int:
     try:
         result = duckdb.execute(query, [str(path)]).fetchone()
         return result[0] if result and result[0] else 0
-    except Exception:
+    except DuckDBError as e:
+        logger.warning("DuckDB query failed in get_last_iteration: %s", e)
+        return 0
+    except Exception as e:
+        logger.warning("Unexpected error in get_last_iteration: %s", e)
         return 0
 
 

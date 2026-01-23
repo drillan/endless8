@@ -174,12 +174,26 @@ class TestLoopResult:
 
     def test_loop_result_completed(self) -> None:
         """Test completed LoopResult."""
+        final_judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="テスト条件",
+                    is_met=True,
+                    evidence="条件を満たしています",
+                    confidence=0.95,
+                )
+            ],
+            overall_reason="完了",
+        )
         result = LoopResult(
             status=LoopStatus.COMPLETED,
             iterations_used=3,
+            final_judgment=final_judgment,
         )
         assert result.status == LoopStatus.COMPLETED
         assert result.iterations_used == 3
+        assert result.final_judgment is not None
 
     def test_loop_result_max_iterations(self) -> None:
         """Test max iterations LoopResult."""
@@ -188,6 +202,32 @@ class TestLoopResult:
             iterations_used=10,
         )
         assert result.status == LoopStatus.MAX_ITERATIONS
+
+    def test_loop_result_error_requires_error_message(self) -> None:
+        """Test that ERROR status requires error_message."""
+        with pytest.raises(ValidationError, match="error_message required"):
+            LoopResult(
+                status=LoopStatus.ERROR,
+                iterations_used=1,
+            )
+
+    def test_loop_result_error_with_message(self) -> None:
+        """Test ERROR status with error_message."""
+        result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message="Something went wrong",
+        )
+        assert result.status == LoopStatus.ERROR
+        assert result.error_message == "Something went wrong"
+
+    def test_loop_result_completed_requires_final_judgment(self) -> None:
+        """Test that COMPLETED status requires final_judgment."""
+        with pytest.raises(ValidationError, match="final_judgment required"):
+            LoopResult(
+                status=LoopStatus.COMPLETED,
+                iterations_used=3,
+            )
 
 
 class TestExecutionSummary:

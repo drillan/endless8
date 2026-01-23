@@ -282,3 +282,93 @@ class TestEngine:
         await engine.run(task_input)
 
         assert engine.current_iteration >= 1
+
+    async def test_engine_run_needs_clarification(
+        self,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+        task_input: TaskInput,
+    ) -> None:
+        """Test that engine returns ERROR status when intake needs clarification."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        # Create intake agent that returns NEEDS_CLARIFICATION
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.NEEDS_CLARIFICATION,
+            task="曖昧なタスク",
+            criteria=["不明確な条件"],
+            clarification_questions=["具体的な基準は何ですか？", "対象範囲は？"],
+        )
+
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=task_input.max_iterations,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.ERROR
+        assert result.iterations_used == 0
+        assert result.intake_result is not None
+        assert result.intake_result.status == IntakeStatus.NEEDS_CLARIFICATION
+        assert result.error_message is not None
+        assert "clarification" in result.error_message.lower()
+        # Execution agent should not be called
+        mock_execution_agent.run.assert_not_called()
+
+    async def test_engine_run_rejected(
+        self,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+        task_input: TaskInput,
+    ) -> None:
+        """Test that engine returns ERROR status when intake rejects the task."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        # Create intake agent that returns REJECTED
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.REJECTED,
+            task="不適切なタスク",
+            criteria=["実行不可能な条件"],
+            rejection_reason="このタスクは実行できません。技術的制約があります。",
+        )
+
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=task_input.max_iterations,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.ERROR
+        assert result.iterations_used == 0
+        assert result.intake_result is not None
+        assert result.intake_result.status == IntakeStatus.REJECTED
+        assert result.error_message is not None
+        assert "rejected" in result.error_message.lower()
+        # Execution agent should not be called
+        mock_execution_agent.run.assert_not_called()
