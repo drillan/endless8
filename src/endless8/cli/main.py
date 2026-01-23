@@ -4,6 +4,7 @@ Provides command-line interface for running tasks.
 """
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Annotated
 
@@ -18,6 +19,8 @@ from endless8.config import EngineConfig, load_config
 from endless8.engine import Engine
 from endless8.history import History, KnowledgeBase
 from endless8.models import LoopStatus, ProgressEvent, ProgressEventType, TaskInput
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(
     name="e8",
@@ -53,6 +56,7 @@ def main(
 @app.command()
 def run(
     task: Annotated[str, typer.Option("--task", "-t", help="タスクの説明")] = "",
+    # Typer requires mutable default for multi-option; noqa suppresses B006
     criteria: Annotated[
         list[str], typer.Option("--criteria", "-c", help="完了条件（複数指定可）")
     ] = [],  # noqa: B006
@@ -334,20 +338,25 @@ def list_tasks(
 
         if history_file.exists():
             # Count iterations and determine status
+            import json
+
             line_count = 0
             last_result = "unknown"
-            for line in history_file.open():
+            for line_num, line in enumerate(history_file.open(), start=1):
                 line = line.strip()
                 if line:
                     line_count += 1
                     # Parse last line to get result
-                    import json
-
                     try:
                         data = json.loads(line)
                         last_result = data.get("result", "unknown")
-                    except json.JSONDecodeError:
-                        pass
+                    except json.JSONDecodeError as e:
+                        logger.warning(
+                            "Invalid JSON in history file %s:%d: %s",
+                            history_file,
+                            line_num,
+                            e,
+                        )
 
             # Determine status
             status = "in_progress"

@@ -162,16 +162,19 @@ class Engine:
         Returns:
             Formatted string of relevant knowledge.
         """
+        limit = self._config.knowledge_context_size
+
         # Use persisted knowledge base if available
         if self._knowledge_base:
-            return await self._knowledge_base.get_context_string(10)
+            return await self._knowledge_base.get_context_string(limit)
 
-        # Fall back to in-memory knowledge
+        # Fall back to in-memory knowledge with debug log
+        logger.debug("Knowledge base not configured, using in-memory storage")
         if not self._knowledge:
             return "ナレッジなし"
 
         lines = []
-        for k in self._knowledge[-10:]:  # Last 10 knowledge items
+        for k in self._knowledge[-limit:]:
             lines.append(f"[{k.type.value}] {k.content}")
         return "\n".join(lines)
 

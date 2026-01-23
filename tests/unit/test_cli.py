@@ -365,3 +365,180 @@ class TestStatusCommand:
         result = runner.invoke(app, ["status", "--project", str(temp_dir)])
         assert result.exit_code == 0
         assert "ナレッジエントリ: 2" in result.output
+
+
+class TestResumeOption:
+    """Tests for --resume option."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Create temporary directory."""
+        return tmp_path
+
+    def test_resume_nonexistent_task(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that resume with nonexistent task_id returns error."""
+        # Create .e8/tasks directory (empty)
+        tasks_dir = temp_dir / ".e8" / "tasks"
+        tasks_dir.mkdir(parents=True)
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--task",
+                "タスク",
+                "--criteria",
+                "条件",
+                "--project",
+                str(temp_dir),
+                "--resume",
+                "nonexistent-task-id",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "見つかりません" in result.output or "nonexistent" in result.output
+
+    def test_resume_existing_task(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that resume with existing task_id works."""
+        import json
+
+        # Create existing task with history
+        task_id = "20240101-120000"
+        task_dir = temp_dir / ".e8" / "tasks" / task_id
+        task_dir.mkdir(parents=True)
+
+        # Create history file
+        history_file = task_dir / "history.jsonl"
+        history_data = {
+            "type": "summary",
+            "iteration": 1,
+            "approach": "テスト",
+            "result": "success",
+            "reason": "理由",
+            "artifacts": [],
+            "metadata": {
+                "tools_used": [],
+                "files_modified": [],
+                "tokens_used": 1000,
+                "strategy_tags": [],
+            },
+            "timestamp": "2026-01-23T10:00:00Z",
+        }
+        history_file.write_text(json.dumps(history_data) + "\n")
+
+        # Create knowledge file
+        knowledge_file = task_dir / "knowledge.jsonl"
+        knowledge_file.write_text("")
+
+        mock_result = LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=2,
+            final_judgment=JudgmentResult(
+                is_complete=True,
+                evaluations=[
+                    CriteriaEvaluation(
+                        criterion="条件",
+                        is_met=True,
+                        evidence="達成",
+                        confidence=1.0,
+                    )
+                ],
+                overall_reason="完了",
+            ),
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                    "--resume",
+                    task_id,
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "再開" in result.output or task_id in result.output
+
+
+class TestListStatus:
+    """Tests for list command status display."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Create temporary directory."""
+        return tmp_path
+
+    def test_list_completed_status(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that completed task shows appropriate status."""
+        import json
+
+        # Create task directory
+        tasks_dir = temp_dir / ".e8" / "tasks"
+        task_dir = tasks_dir / "20240101-120000"
+        task_dir.mkdir(parents=True)
+
+        # Create history file with final_result showing completed
+        history_file = task_dir / "history.jsonl"
+        records = [
+            {"type": "summary", "result": "success", "iteration": 1},
+            {"type": "final_result", "status": "completed", "iterations_used": 1},
+        ]
+        history_file.write_text("\n".join(json.dumps(r) for r in records) + "\n")
+
+        result = runner.invoke(app, ["list", "--project", str(temp_dir)])
+        assert result.exit_code == 0
+        assert "20240101-120000" in result.output
+
+    def test_list_with_corrupted_history(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that corrupted history does not crash list command."""
+        import json
+
+        # Create task directories
+        tasks_dir = temp_dir / ".e8" / "tasks"
+
+        # Task with corrupted history
+        corrupted_task = tasks_dir / "20240101-100000"
+        corrupted_task.mkdir(parents=True)
+        corrupted_history = corrupted_task / "history.jsonl"
+        corrupted_history.write_text("not valid json{{\n")
+
+        # Task with valid history
+        valid_task = tasks_dir / "20240101-110000"
+        valid_task.mkdir(parents=True)
+        valid_history = valid_task / "history.jsonl"
+        valid_data = {"type": "summary", "result": "success", "iteration": 1}
+        valid_history.write_text(json.dumps(valid_data) + "\n")
+
+        result = runner.invoke(app, ["list", "--project", str(temp_dir)])
+
+        # Should not crash
+        assert result.exit_code == 0
+        # Both tasks should be listed
+        assert "20240101-100000" in result.output
+        assert "20240101-110000" in result.output
+        # Total should be 2
+        assert "合計: 2 タスク" in result.output

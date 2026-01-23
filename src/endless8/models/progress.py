@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import NotRequired, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,38 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class TaskStartData(TypedDict):
+    """TASK_START イベントのデータ。"""
+
+    task: str
+    criteria: list[str]
+    resume: NotRequired[bool]
+
+
+class StatusData(TypedDict):
+    """ステータス関連イベント（INTAKE_COMPLETE, TASK_END等）のデータ。"""
+
+    status: str
+    reason: NotRequired[str]
+    error: NotRequired[str]
+    missing_tools: NotRequired[list[str]]
+
+
+class JudgmentData(TypedDict):
+    """JUDGMENT_COMPLETE イベントのデータ。"""
+
+    is_complete: bool
+
+
+class IterationEndData(TypedDict):
+    """ITERATION_END イベントのデータ。"""
+
+    result: str
+
+
+ProgressData = TaskStartData | StatusData | JudgmentData | IterationEndData
+
+
 class ProgressEvent(BaseModel):
     """進捗イベント。"""
 
@@ -31,7 +63,7 @@ class ProgressEvent(BaseModel):
     iteration: int | None = Field(None, description="イテレーション番号")
     message: str = Field(..., description="進捗メッセージ")
     timestamp: datetime = Field(default_factory=_utc_now)
-    data: dict[str, Any] | None = Field(None, description="追加データ")
+    data: ProgressData | None = Field(None, description="追加データ")
 
 
 __all__ = ["ProgressEventType", "ProgressEvent"]

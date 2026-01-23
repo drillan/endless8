@@ -436,3 +436,107 @@ class TestHistory:
         assert '"type": "summary"' in content
         assert '"type": "judgment"' in content
         assert '"type": "final_result"' in content
+
+
+class TestHistoryWriteErrors:
+    """Tests for history write error handling."""
+
+    @pytest.fixture
+    def temp_history_path(self, tmp_path: Path) -> Path:
+        """Create temporary history file path."""
+        return tmp_path / ".e8" / "history.jsonl"
+
+    @pytest.fixture
+    def sample_summary(self) -> ExecutionSummary:
+        """Create sample execution summary."""
+        return ExecutionSummary(
+            iteration=1,
+            approach="テスト",
+            result=ExecutionStatus.SUCCESS,
+            reason="テスト理由",
+            artifacts=[],
+            metadata=SummaryMetadata(),
+            timestamp="2026-01-23T10:00:00Z",
+        )
+
+    async def test_append_raises_on_write_error(
+        self,
+        temp_history_path: Path,
+        sample_summary: ExecutionSummary,
+    ) -> None:
+        """Test that append raises OSError when write fails."""
+        from unittest.mock import patch
+
+        from endless8.history import History
+
+        history = History(history_path=temp_history_path)
+
+        # Ensure parent directory exists but write fails
+        temp_history_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with (
+            patch.object(Path, "open", side_effect=OSError("Disk full")),
+            pytest.raises(OSError, match="Disk full"),
+        ):
+            await history.append(sample_summary)
+
+    async def test_append_judgment_raises_on_write_error(
+        self,
+        temp_history_path: Path,
+    ) -> None:
+        """Test that append_judgment raises OSError when write fails."""
+        from unittest.mock import patch
+
+        from endless8.history import History
+        from endless8.models import CriteriaEvaluation, JudgmentResult
+
+        history = History(history_path=temp_history_path)
+
+        judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                ),
+            ],
+            overall_reason="完了",
+        )
+
+        # Ensure parent directory exists but write fails
+        temp_history_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with (
+            patch.object(Path, "open", side_effect=OSError("Permission denied")),
+            pytest.raises(OSError, match="Permission denied"),
+        ):
+            await history.append_judgment(judgment, iteration=1)
+
+    async def test_append_final_result_raises_on_write_error(
+        self,
+        temp_history_path: Path,
+    ) -> None:
+        """Test that append_final_result raises OSError when write fails."""
+        from unittest.mock import patch
+
+        from endless8.history import History
+        from endless8.models import LoopResult, LoopStatus
+
+        history = History(history_path=temp_history_path)
+
+        # Use MAX_ITERATIONS status which doesn't require final_judgment
+        result = LoopResult(
+            status=LoopStatus.MAX_ITERATIONS,
+            iterations_used=1,
+        )
+
+        # Ensure parent directory exists but write fails
+        temp_history_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with (
+            patch.object(Path, "open", side_effect=OSError("Read-only filesystem")),
+            pytest.raises(OSError, match="Read-only filesystem"),
+        ):
+            await history.append_final_result(result)

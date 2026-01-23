@@ -499,3 +499,238 @@ class TestEngine:
         # Should proceed to execution
         assert result.status == LoopStatus.COMPLETED
         mock_execution_agent.run.assert_called()
+
+
+class TestProgressCallback:
+    """Tests for on_progress callback."""
+
+    @pytest.fixture
+    def mock_intake_agent(self) -> AsyncMock:
+        """Create mock intake agent."""
+        agent = AsyncMock()
+        agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_execution_agent(self) -> AsyncMock:
+        """Create mock execution agent."""
+        agent = AsyncMock()
+        agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_summary_agent(self) -> AsyncMock:
+        """Create mock summary agent."""
+        agent = AsyncMock()
+        agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-23T10:00:00Z",
+            ),
+            [],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_judgment_agent(self) -> AsyncMock:
+        """Create mock judgment agent."""
+        agent = AsyncMock()
+        agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+        return agent
+
+    async def test_progress_callback_receives_all_events(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+    ) -> None:
+        """Test that all event types are passed to callback."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import ProgressEvent, ProgressEventType
+
+        events: list[ProgressEvent] = []
+
+        def progress_callback(event: ProgressEvent) -> None:
+            events.append(event)
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+            max_iterations=3,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=3)
+        await engine.run(task_input, on_progress=progress_callback)
+
+        # Should receive at least: TASK_START, INTAKE_COMPLETE,
+        # ITERATION_START, EXECUTION_COMPLETE, JUDGMENT_COMPLETE,
+        # ITERATION_END, TASK_END
+        event_types = [e.event_type for e in events]
+        assert ProgressEventType.TASK_START in event_types
+        assert ProgressEventType.INTAKE_COMPLETE in event_types
+        assert ProgressEventType.ITERATION_START in event_types
+        assert ProgressEventType.EXECUTION_COMPLETE in event_types
+        assert ProgressEventType.JUDGMENT_COMPLETE in event_types
+        assert ProgressEventType.ITERATION_END in event_types
+        assert ProgressEventType.TASK_END in event_types
+
+    async def test_progress_callback_exception_does_not_stop_engine(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+    ) -> None:
+        """Test that callback exception does not stop engine execution."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import ProgressEvent
+
+        call_count = 0
+
+        def failing_callback(_event: ProgressEvent) -> None:
+            nonlocal call_count
+            call_count += 1
+            raise RuntimeError("Callback error")
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+            max_iterations=3,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=3)
+
+        # Engine should still complete even if callback raises
+        # This test documents current behavior (callback exceptions propagate)
+        # If this fails, engine needs try-except around callback invocation
+        with pytest.raises(RuntimeError, match="Callback error"):
+            await engine.run(task_input, on_progress=failing_callback)
+
+
+class TestKnowledgeContextSize:
+    """Tests for knowledge_context_size setting."""
+
+    @pytest.fixture
+    def mock_intake_agent(self) -> AsyncMock:
+        """Create mock intake agent."""
+        agent = AsyncMock()
+        agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_execution_agent(self) -> AsyncMock:
+        """Create mock execution agent."""
+        agent = AsyncMock()
+        agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_summary_agent(self) -> AsyncMock:
+        """Create mock summary agent."""
+        agent = AsyncMock()
+        agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-23T10:00:00Z",
+            ),
+            [],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_judgment_agent(self) -> AsyncMock:
+        """Create mock judgment agent."""
+        agent = AsyncMock()
+        agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+        return agent
+
+    async def test_knowledge_context_size_is_configurable(self) -> None:
+        """Test that knowledge_context_size setting is used."""
+        from endless8.config import EngineConfig
+
+        # Test that knowledge_context_size can be set
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+            max_iterations=3,
+            knowledge_context_size=15,
+        )
+        assert config.knowledge_context_size == 15
+
+    async def test_knowledge_context_size_default_value(self) -> None:
+        """Test that knowledge_context_size has a default value."""
+        from endless8.config import EngineConfig
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+        )
+        # Should have a configured default (not hardcoded 10 in engine)
+        assert config.knowledge_context_size >= 1

@@ -111,8 +111,12 @@ class History:
             "timestamp": summary.timestamp,
         }
 
-        with self._path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        try:
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:
+            logger.error("Failed to write to history file %s: %s", self._path, e)
+            raise
 
     async def get_recent(self, limit: int = 5) -> list[ExecutionSummary]:
         """Get recent execution summaries.
@@ -217,8 +221,14 @@ class History:
             "suggested_next_action": judgment.suggested_next_action,
         }
 
-        with self._path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        try:
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:
+            logger.error(
+                "Failed to write judgment to history file %s: %s", self._path, e
+            )
+            raise
 
     async def append_final_result(self, result: LoopResult) -> None:
         """Append a final result to history.
@@ -256,8 +266,14 @@ class History:
             "error_message": result.error_message,
         }
 
-        with self._path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        try:
+            with self._path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        except OSError as e:
+            logger.error(
+                "Failed to write final result to history file %s: %s", self._path, e
+            )
+            raise
 
 
 __all__ = ["History"]
