@@ -23,6 +23,8 @@ except ImportError:
 def create_agent_model(
     model_name: str,
     max_turns: int = 10,
+    allowed_tools: list[str] | None = None,
+    timeout: float = 300.0,
 ) -> Union["ClaudeCodeModel", str]:
     """Create an agent model for pydantic-ai.
 
@@ -32,12 +34,16 @@ def create_agent_model(
     Args:
         model_name: Name of the model to use (e.g., "anthropic:claude-sonnet-4-5").
         max_turns: Maximum number of conversation turns for ClaudeCodeModel.
+        allowed_tools: List of allowed tool names for ClaudeCodeModel.
+        timeout: Timeout in seconds for SDK queries.
 
     Returns:
         ClaudeCodeModel instance or model name string.
     """
     if _CLAUDECODE_AVAILABLE and ClaudeCodeModel is not None:
-        return ClaudeCodeModel(max_turns=max_turns)
+        return ClaudeCodeModel(
+            max_turns=max_turns, allowed_tools=allowed_tools, timeout=timeout
+        )
     return model_name
 
 

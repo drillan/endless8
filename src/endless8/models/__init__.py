@@ -1,6 +1,7 @@
 """Data models for endless8."""
 
 from endless8.models.knowledge import Knowledge, KnowledgeConfidence, KnowledgeType
+from endless8.models.progress import ProgressEvent, ProgressEventType
 from endless8.models.results import (
     CriteriaEvaluation,
     ExecutionResult,
@@ -36,4 +37,7 @@ __all__ = [
     "KnowledgeType",
     "KnowledgeConfidence",
     "Knowledge",
+    # Progress
+    "ProgressEventType",
+    "ProgressEvent",
 ]

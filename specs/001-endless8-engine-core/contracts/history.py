@@ -42,7 +42,7 @@ class HistoryProtocol(Protocol):
     - コンテキスト生成（直近N件 + 失敗履歴）
     - JSONL ファイルへの永続化
 
-    Storage: .e8/history.jsonl
+    Storage: .e8/tasks/<task-id>/history.jsonl
     """
 
     def add_summary(self, summary: ExecutionSummary) -> None:

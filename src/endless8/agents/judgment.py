@@ -44,13 +44,19 @@ DEFAULT_JUDGMENT_PROMPT = """あなたは判定エージェントです。
 class JudgmentAgent:
     """Judgment Agent for evaluating completion criteria."""
 
-    def __init__(self, model_name: str = "anthropic:claude-sonnet-4-5") -> None:
+    def __init__(
+        self,
+        model_name: str = "anthropic:claude-sonnet-4-5",
+        timeout: float = 300.0,
+    ) -> None:
         """Initialize the judgment agent.
 
         Args:
             model_name: Name of the model to use for the agent.
+            timeout: Timeout in seconds for SDK queries.
         """
         self._model_name = model_name
+        self._timeout = timeout
         self._agent: Agent[None, JudgmentResult] | None = None
 
     def _build_prompt(self, context: JudgmentContext) -> str:
@@ -98,7 +104,12 @@ class JudgmentAgent:
         # Use custom prompt if provided
         system_prompt = context.custom_prompt or DEFAULT_JUDGMENT_PROMPT
 
-        model = create_agent_model(self._model_name, max_turns=10)
+        model = create_agent_model(
+            self._model_name,
+            max_turns=10,
+            allowed_tools=[],  # No tools - pure text/JSON output only
+            timeout=self._timeout,
+        )
 
         agent: Agent[None, JudgmentResult] = Agent(
             model,

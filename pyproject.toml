@@ -39,6 +39,7 @@ dev = [
 target-version = "py313"
 line-length = 88
 src = ["src", "tests"]
+exclude = ["specs/"]
 
 [tool.ruff.lint]
 select = [
@@ -68,6 +69,7 @@ warn_unused_ignores = true
 disallow_untyped_defs = true
 disallow_any_generics = true
 plugins = ["pydantic.mypy"]
+exclude = ["specs/"]
 
 [[tool.mypy.overrides]]
 module = ["duckdb.*", "claudecode_model.*"]

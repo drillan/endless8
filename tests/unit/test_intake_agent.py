@@ -173,3 +173,88 @@ class TestIntakeAgent:
             # Should generate questions for ambiguous criteria
             assert result.clarification_questions is not None
             assert len(result.clarification_questions) >= 2
+
+    async def test_intake_agent_suggests_tools_for_code_task(
+        self,
+    ) -> None:
+        """Test that intake agent suggests appropriate tools for code-related tasks."""
+        from endless8.agents.intake import IntakeAgent
+
+        with patch("endless8.agents.intake.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=IntakeResult(
+                    status=IntakeStatus.ACCEPTED,
+                    task="認証機能を実装する",
+                    criteria=["ログイン機能が動作する", "テストがパスする"],
+                    suggested_tools=["Read", "Edit", "Write", "Bash"],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+
+            agent = IntakeAgent()
+            result = await agent.run(
+                task="認証機能を実装する",
+                criteria=["ログイン機能が動作する", "テストがパスする"],
+            )
+
+            assert result.status == IntakeStatus.ACCEPTED
+            assert result.suggested_tools is not None
+            assert len(result.suggested_tools) > 0
+            assert "Read" in result.suggested_tools
+            assert "Edit" in result.suggested_tools
+
+    async def test_intake_agent_suggests_tools_for_web_research_task(
+        self,
+    ) -> None:
+        """Test that intake agent suggests WebSearch/WebFetch for research tasks."""
+        from endless8.agents.intake import IntakeAgent
+
+        with patch("endless8.agents.intake.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=IntakeResult(
+                    status=IntakeStatus.ACCEPTED,
+                    task="最新のPython 3.13の新機能を調査する",
+                    criteria=["主要な新機能をリストアップ"],
+                    suggested_tools=["WebSearch", "WebFetch", "Read", "Write"],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+
+            agent = IntakeAgent()
+            result = await agent.run(
+                task="最新のPython 3.13の新機能を調査する",
+                criteria=["主要な新機能をリストアップ"],
+            )
+
+            assert result.status == IntakeStatus.ACCEPTED
+            assert result.suggested_tools is not None
+            assert "WebSearch" in result.suggested_tools
+            assert "WebFetch" in result.suggested_tools
+
+    async def test_intake_agent_default_empty_suggested_tools(
+        self,
+    ) -> None:
+        """Test that suggested_tools defaults to empty list."""
+        from endless8.agents.intake import IntakeAgent
+
+        with patch("endless8.agents.intake.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            # Return IntakeResult without suggested_tools
+            mock_agent.run.return_value = MagicMock(
+                output=IntakeResult(
+                    status=IntakeStatus.ACCEPTED,
+                    task="シンプルなタスク",
+                    criteria=["完了条件"],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+
+            agent = IntakeAgent()
+            result = await agent.run(
+                task="シンプルなタスク",
+                criteria=["完了条件"],
+            )
+
+            assert result.suggested_tools == []

@@ -372,3 +372,130 @@ class TestEngine:
         assert "rejected" in result.error_message.lower()
         # Execution agent should not be called
         mock_execution_agent.run.assert_not_called()
+
+    async def test_engine_run_tool_mismatch_error(
+        self,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+        task_input: TaskInput,
+    ) -> None:
+        """Test that engine returns ERROR when suggested_tools don't match allowed_tools."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        # Create intake agent that suggests tools not in allowed_tools
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="Web検索タスク",
+            criteria=["検索結果を取得"],
+            suggested_tools=["WebSearch", "WebFetch", "Read", "Write"],
+        )
+
+        # Config with limited allowed_tools (no WebSearch/WebFetch)
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=task_input.max_iterations,
+        )
+        config.claude_options.allowed_tools = ["Read", "Edit", "Write", "Bash"]
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.ERROR
+        assert result.iterations_used == 0
+        assert result.error_message is not None
+        assert "WebSearch" in result.error_message or "WebFetch" in result.error_message
+        # Execution agent should not be called
+        mock_execution_agent.run.assert_not_called()
+
+    async def test_engine_run_tool_match_success(
+        self,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+        task_input: TaskInput,
+    ) -> None:
+        """Test that engine proceeds when suggested_tools match allowed_tools."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        # Create intake agent that suggests tools within allowed_tools
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="コード編集タスク",
+            criteria=["コードを修正"],
+            suggested_tools=["Read", "Edit", "Write"],
+        )
+
+        # Config with allowed_tools that include all suggested tools
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=task_input.max_iterations,
+        )
+        config.claude_options.allowed_tools = ["Read", "Edit", "Write", "Bash"]
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        result = await engine.run(task_input)
+
+        # Should proceed to execution
+        assert result.status == LoopStatus.COMPLETED
+        mock_execution_agent.run.assert_called()
+
+    async def test_engine_run_empty_suggested_tools_proceeds(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+        task_input: TaskInput,
+    ) -> None:
+        """Test that engine proceeds when suggested_tools is empty."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        # Override to return empty suggested_tools
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="タスク",
+            criteria=["条件"],
+            suggested_tools=[],  # Empty
+        )
+
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=task_input.max_iterations,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        result = await engine.run(task_input)
+
+        # Should proceed to execution
+        assert result.status == LoopStatus.COMPLETED
+        mock_execution_agent.run.assert_called()

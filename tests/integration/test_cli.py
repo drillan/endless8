@@ -211,8 +211,7 @@ class TestCLI:
         # Create config file with missing required fields
         malformed_config = temp_project_dir / "malformed.yaml"
         malformed_config.write_text(
-            "# Missing required 'task' and 'criteria' fields\n"
-            "max_iterations: 5\n"
+            "# Missing required 'task' and 'criteria' fields\nmax_iterations: 5\n"
         )
 
         result = runner.invoke(

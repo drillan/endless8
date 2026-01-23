@@ -47,15 +47,21 @@ class ExecutionAgent:
         self,
         append_system_prompt: str | None = None,
         model_name: str = "anthropic:claude-sonnet-4-5",
+        allowed_tools: list[str] | None = None,
+        timeout: float = 300.0,
     ) -> None:
         """Initialize the execution agent.
 
         Args:
             append_system_prompt: Additional system prompt to append.
             model_name: Name of the model to use for the agent.
+            allowed_tools: List of allowed tool names for the agent.
+            timeout: Timeout in seconds for SDK queries.
         """
         self._append_system_prompt = append_system_prompt
         self._model_name = model_name
+        self._allowed_tools = allowed_tools
+        self._timeout = timeout
 
     def _build_prompt(self, context: ExecutionContext) -> str:
         """Build the execution prompt from context.
@@ -96,7 +102,12 @@ class ExecutionAgent:
         if self._append_system_prompt:
             system_prompt += f"\n\n{self._append_system_prompt}"
 
-        model = create_agent_model(self._model_name, max_turns=50)
+        model = create_agent_model(
+            self._model_name,
+            max_turns=50,
+            allowed_tools=self._allowed_tools,
+            timeout=self._timeout,
+        )
 
         agent: Agent[None, ExecutionResult] = Agent(
             model,

@@ -35,6 +35,26 @@ DEFAULT_INTAKE_PROMPT = """あなたは受付エージェントです。
 - 「良いものを作る」→ 基準が完全に不明
 - 「適切に処理する」→ 何をもって適切か不明
 
+## ツール提案ガイドライン
+
+タスク内容を分析し、実行に必要なツールを suggested_tools に含めてください。
+
+利用可能なツール:
+- Read: ファイル読み取り
+- Edit: ファイル編集
+- Write: ファイル作成
+- Bash: コマンド実行
+- WebSearch: Web検索
+- WebFetch: URL取得
+- Glob: ファイルパターン検索
+- Grep: 内容検索
+
+提案の目安:
+- コード変更タスク → ["Read", "Edit", "Write", "Bash"]
+- Web調査タスク → ["WebSearch", "WebFetch", "Read", "Write"]
+- コード分析タスク → ["Read", "Glob", "Grep"]
+- テスト実行タスク → ["Read", "Edit", "Bash"]
+
 ## 出力形式
 
 status: "accepted" | "needs_clarification" | "rejected"
@@ -42,19 +62,26 @@ task: 受け付けたタスク
 criteria: 完了条件リスト（明確化された場合は更新）
 clarification_questions: 明確化が必要な場合の質問リスト
 rejection_reason: 却下理由（却下の場合のみ）
+suggested_tools: タスク実行に推奨されるツールのリスト
 """
 
 
 class IntakeAgent:
     """Intake Agent for validating task and criteria."""
 
-    def __init__(self, model_name: str = "anthropic:claude-sonnet-4-5") -> None:
+    def __init__(
+        self,
+        model_name: str = "anthropic:claude-sonnet-4-5",
+        timeout: float = 300.0,
+    ) -> None:
         """Initialize the intake agent.
 
         Args:
             model_name: Name of the model to use for the agent.
+            timeout: Timeout in seconds for SDK queries.
         """
         self._model_name = model_name
+        self._timeout = timeout
 
     def _build_prompt(
         self,
@@ -111,7 +138,12 @@ class IntakeAgent:
         Returns:
             IntakeResult with validation status and any clarification questions.
         """
-        model = create_agent_model(self._model_name, max_turns=10)
+        model = create_agent_model(
+            self._model_name,
+            max_turns=10,
+            allowed_tools=[],  # No tools - pure text/JSON output only
+            timeout=self._timeout,
+        )
 
         agent: Agent[None, IntakeResult] = Agent(
             model,

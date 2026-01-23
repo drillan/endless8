@@ -55,18 +55,31 @@ e8 run --config task.yaml
 e8 run "バグを修正" --project /path/to/project --criteria "テストがパスする"
 ```
 
-### 4. 履歴を永続化して再開可能に
+### 4. タスクの再開
 
 ```bash
-# 履歴を保存
-e8 run "大規模なリファクタリング" \
-  --persist .e8/history.jsonl \
-  --criteria "すべてのテストがパスする"
+# 特定のタスクIDを指定して再開
+e8 run --task "元のタスク" --criteria "条件" --resume 20260123-133000
+```
 
-# 中断後、同じ設定で再実行すると履歴から再開
-e8 run "大規模なリファクタリング" \
-  --persist .e8/history.jsonl \
-  --criteria "すべてのテストがパスする"
+タスクIDは `e8 list` コマンドで確認できます。
+
+### 5. タスク一覧の確認
+
+```bash
+# タスク一覧を表示
+e8 list
+```
+
+出力例:
+```
+endless8 タスク一覧
+
+TASK_ID              STATUS      ITERATIONS  LAST_UPDATED
+2026-01-23T13-30-00  completed   3           2026-01-23 13:45:00
+2026-01-23T10-00-00  in_progress 5           2026-01-23 10:30:00
+
+合計: 2 タスク
 ```
 
 ## Python API
@@ -166,9 +179,17 @@ prompts:
 |-----------|--------|------|
 | `--criteria` | `-c` | 完了条件（複数指定可） |
 | `--config` | | YAML 設定ファイル |
-| `--project` | | プロジェクトディレクトリ |
-| `--persist` | | 履歴ファイルパス |
-| `--max-iterations` | | 最大イテレーション数 |
+| `--project` | `-p` | プロジェクトディレクトリ |
+| `--max-iterations` | `-m` | 最大イテレーション数 |
+| `--resume` | | タスク再開（IDなしで最新） |
+
+### CLI コマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `e8 run` | タスクを実行 |
+| `e8 list` | タスク一覧を表示 |
+| `e8 status` | 現在の実行状態を表示 |
 
 ## Data Storage
 
@@ -177,12 +198,16 @@ prompts:
 ```
 project/
 ├── .e8/
-│   ├── history.jsonl      # タスク単位の履歴
 │   ├── knowledge.jsonl    # プロジェクト単位のナレッジ
-│   └── logs/              # オプション: 生ログ
-│       ├── iteration-001.jsonl
-│       ├── iteration-002.jsonl
-│       └── ...
+│   └── tasks/
+│       ├── 2026-01-23T10-00-00/   # タスクID（タイムスタンプ）
+│       │   ├── history.jsonl      # タスクの履歴
+│       │   ├── config.yaml        # 設定スナップショット
+│       │   └── logs/              # オプション: 生ログ
+│       │       ├── iteration-001.jsonl
+│       │       └── iteration-002.jsonl
+│       └── 2026-01-23T13-30-00/   # 別のタスク
+│           └── ...
 └── task.yaml              # 設定ファイル（オプション）
 ```
 
