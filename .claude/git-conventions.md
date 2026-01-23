@@ -1,64 +1,82 @@
 # Git Conventions
 
-このファイルはプロジェクトのGit命名規則を定義するSingle Source of Truth（正式ソース）です。
+This file is the Single Source of Truth for the project's Git naming conventions.
 
 ## Branch Naming
 
 ### Format
 
 ```
-<issue-number>-<description>
-```
-
-または type prefix 付き:
-
-```
 <type>/<issue-number>-<description>
 ```
 
-### Type Prefixes (Optional)
+### Type Prefixes
 
-| タイプ | プレフィックス | 用途 |
-|--------|---------------|------|
-| 機能追加 | `feat/` | 新機能の実装 |
-| バグ修正 | `fix/` | バグの修正 |
-| リファクタリング | `refactor/` | コードの整理・改善 |
-| ドキュメント | `docs/` | ドキュメントの追加・修正 |
-| テスト | `test/` | テストの追加・修正 |
-| 雑務 | `chore/` | 設定変更、依存関係更新など |
+| Type | Prefix | Usage |
+|------|--------|-------|
+| Feature | `feat/` | New feature implementation |
+| Bug fix | `fix/` | Bug fixes |
+| Refactoring | `refactor/` | Code cleanup/improvement |
+| Documentation | `docs/` | Documentation additions/edits |
+| Testing | `test/` | Test additions/edits |
+| Chore | `chore/` | Config changes, dependency updates, etc. |
 
 ### Issue Number
 
-- **ゼロパディングなし**: `1`（正）、`001`（誤）
-- issue番号がない場合は省略可: `feat/add-logging`
-
-**注意**: specs/ ディレクトリはゼロパディングあり（`001-engine-core`）だが、Gitブランチはゼロパディングなし（`1-engine-core`）
+- No zero-padding: `123` (correct), `001` (incorrect)
+- Can be omitted if no issue: `feat/add-logging`
 
 ### Description
 
-- 英語で記述
-- ハイフン区切り（kebab-case）
-- 2-4語程度の簡潔な説明
-- 小文字のみ
-- ブランチ名全体で40文字以内
+- Write in English
+- Hyphen-separated (kebab-case)
+- Concise description in 2-4 words
+- Lowercase only
 
 ### Examples
 
 ```
-1-endless8-engine-core
-feat/2-add-reception-agent
-fix/3-fix-history-parsing
-refactor/4-cleanup-executor
-docs/5-update-readme
-test/6-add-integration-tests
-chore/7-update-dependencies
+feat/123-add-user-authentication
+fix/456-fix-login-error
+refactor/789-cleanup-api-client
+docs/101-update-readme
+test/111-add-e2e-tests
+chore/222-update-dependencies
 ```
+
+### Branch Type Detection (for start-issue)
+
+Mapping for automatic branch type detection from issues:
+
+**GitHub Labels → Prefix:**
+
+| Label | Prefix |
+|-------|--------|
+| `enhancement`, `feature` | `feat/` |
+| `bug` | `fix/` |
+| `refactoring`, `refactor` | `refactor/` |
+| `documentation`, `docs` | `docs/` |
+| `test` | `test/` |
+| `chore` | `chore/` |
+
+**Keywords → Prefix (fallback when no labels):**
+
+| Keywords | Prefix |
+|----------|--------|
+| `bug`, `fix`, `error`, `issue` | `fix/` |
+| `refactor`, `cleanup`, `improve`, `reorganize` | `refactor/` |
+| `doc`, `readme`, `documentation` | `docs/` |
+| `test`, `testing` | `test/` |
+| `chore`, `config`, `setup`, `dependency` | `chore/` |
+| `add`, `feature`, `implement`, `create`, `new` | `feat/` |
+
+**Default:** `feat/`
 
 ## Commit Message
 
 ### Format
 
-[Conventional Commits](https://www.conventionalcommits.org/) 形式に従う:
+Follow [Conventional Commits](https://www.conventionalcommits.org/) format:
 
 ```
 <type>(<scope>): <description>
@@ -70,37 +88,36 @@ chore/7-update-dependencies
 
 ### Type
 
-ブランチプレフィックスと同一:
-- `feat`: 新機能
-- `fix`: バグ修正
-- `docs`: ドキュメント
-- `refactor`: リファクタリング
-- `test`: テスト
-- `chore`: その他
+Same as branch prefixes:
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation
+- `refactor`: Refactoring
+- `test`: Testing
+- `chore`: Other
 
-### Scope（任意）
+### Scope (optional)
 
-- issue番号: `feat(#1): add engine core`
-- モジュール名: `fix(executor): handle timeout error`
-- エージェント名: `feat(reception): add validation`
+- Issue number: `feat(#123): add login feature`
+- Module name: `fix(api): handle timeout error`
 
 ### Description
 
-- 英語で記述
-- 命令形（imperative mood）: "add" not "added"
-- 小文字で開始
-- 末尾にピリオドを付けない
+- Write in English
+- Use imperative mood: "add" not "added"
+- Start with lowercase
+- No period at the end
 
 ### Examples
 
 ```
-feat(#1): add engine core implementation
+feat(#123): add user authentication
 
-fix(executor): handle session expiration correctly
+fix(api): handle session expiration correctly
 
 docs: update installation guide
 
-refactor(#2): extract common validation logic
+refactor(#456): extract common validation logic
 
 chore: update dependencies to latest versions
 ```
@@ -115,30 +132,30 @@ chore: update dependencies to latest versions
 
 ### Rules
 
-- 配置場所: メインリポジトリの親ディレクトリ
-- プロジェクト名: `endless8`
-- ブランチ名: `/` を `-` に置換
+- Location: Parent directory of main repository
+- Project name: Use repository directory name (e.g., `my-project`)
+- Branch name: Replace `/` with `-`
 
 ### Examples
 
-| ブランチ | ワークツリーディレクトリ |
-|---------|------------------------|
-| `1-engine-core` | `../endless8-1-engine-core` |
-| `feat/2-add-auth` | `../endless8-feat-2-add-auth` |
-| `fix/3-fix-login` | `../endless8-fix-3-fix-login` |
+| Branch | Worktree Directory |
+|--------|-------------------|
+| `feat/123-add-auth` | `../${PROJECT_NAME}-feat-123-add-auth` |
+| `fix/456-fix-login` | `../${PROJECT_NAME}-fix-456-fix-login` |
+| `refactor/789-cleanup` | `../${PROJECT_NAME}-refactor-789-cleanup` |
 
 ### Commands
 
 ```bash
-# 既存ブランチのワークツリー作成
-git worktree add ../endless8-feat-2-add-auth feat/2-add-auth
+# Create worktree for existing branch
+git worktree add ../${PROJECT_NAME}-feat-123-add-auth feat/123-add-auth
 
-# 新規ブランチとワークツリーを同時作成
-git worktree add -b feat/2-add-auth ../endless8-feat-2-add-auth
+# Create new branch and worktree simultaneously
+git worktree add -b feat/123-add-auth ../${PROJECT_NAME}-feat-123-add-auth
 
-# ワークツリーの一覧
+# List worktrees
 git worktree list
 
-# ワークツリーの削除
-git worktree remove ../endless8-feat-2-add-auth
+# Remove worktree
+git worktree remove ../${PROJECT_NAME}-feat-123-add-auth
 ```
