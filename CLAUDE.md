@@ -76,3 +76,10 @@ uv run python ...
 
 - specs/ ディレクトリ: `<issue-number>-<name>`（例: `001-engine-core`）
 - Git ブランチ: `.claude/git-conventions.md` 参照
+
+## Active Technologies
+- Python 3.13+ + pydantic-ai, claudecode-model, DuckDB, typer (CLI), pyyaml (001-endless8-engine-core)
+- JSONL形式ファイル（.e8/history.jsonl, .e8/knowledge.jsonl, .e8/logs/） (001-endless8-engine-core)
+
+## Recent Changes
+- 001-endless8-engine-core: Added Python 3.13+ + pydantic-ai, claudecode-model, DuckDB, typer (CLI), pyyaml

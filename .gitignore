@@ -224,3 +224,6 @@ __marimo__/
 # deubg logs
 debug.log
 /debug/
+
+# endless8 working directory
+.e8/

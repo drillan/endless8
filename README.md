@@ -32,67 +32,72 @@ Ralph Wiggum（Claude Code のループプラグイン）にインスパイア�
 ## インストール
 
 ```bash
-uv add endless8
+uv tool install git+https://github.com/drillan/endless8.git
 ```
 
 ## 使用例
 
-### 基本的な使用
+### Python API
 
 ```python
-from endless8 import Engine
+from endless8.engine import Engine
+from endless8.models import TaskInput
+from endless8.config import EngineConfig
 
-engine = Engine()
+config = EngineConfig(persist=".e8/history.jsonl")
+engine = Engine(config)
 
-result = await engine.run(
+result = await engine.run(TaskInput(
     task="認証機能を実装してください",
-    completion_criteria=[
-        "すべてのテストが通る",
-        "カバレッジが80%以上",
-    ],
+    criteria=["すべてのテストが通る", "カバレッジが80%以上"],
     max_iterations=10,
-)
+))
 
-print(f"完了: {result.success}")
-print(f"イテレーション: {result.iterations}")
+print(f"状態: {result.status}")
+print(f"イテレーション: {result.iterations_used}")
 ```
 
-### 曖昧な条件の明確化
+### ストリーミング実行
+
+各イテレーションのサマリをストリーミングで取得できます：
 
 ```python
-def ask_user(question: str) -> str:
-    return input(f"質問: {question}\n回答: ")
-
-result = await engine.run(
-    task="APIを最適化してください",
-    completion_criteria="十分に高速になったら完了",  # 曖昧
-    on_clarification=ask_user,  # 受付エージェントが質問を生成
-)
-```
-
-### 履歴の永続化（中断・再開）
-
-```python
-from pathlib import Path
-
-result = await engine.run(
-    task="大規模リファクタリング",
-    completion_criteria=["全テスト通過", "型エラーなし"],
-    persist_history=Path(".e8/history.jsonl"),
-)
+async for summary in engine.run_iter(task_input):
+    print(f"[Iteration {summary.iteration}] {summary.result}")
 ```
 
 ## CLI
 
 ```bash
 # 基本実行
-e8 run "タスクの説明" --criteria "条件1" --criteria "条件2"
+e8 run --task "タスクの説明" --criteria "条件1" --criteria "条件2"
 
-# 設定ファイルから
-e8 run --config task.yaml
+# プロジェクトディレクトリを指定
+e8 run -t "タスク" -c "条件" --project /path/to/project
 
-# 履歴を永続化
-e8 run "タスク" --persist .e8/history.jsonl
+# イテレーション数を指定
+e8 run -t "タスク" -c "条件" --max-iterations 5
+```
+
+### CLI オプション一覧
+
+| オプション | 短縮形 | 説明 |
+|-----------|--------|------|
+| `--task` | `-t` | タスクの説明 |
+| `--criteria` | `-c` | 完了条件（複数指定可） |
+| `--project` | `-p` | プロジェクトディレクトリ |
+| `--max-iterations` | `-m` | 最大イテレーション数（デフォルト: 10） |
+
+## データストレージ
+
+endless8 はプロジェクトディレクトリに `.e8/` ディレクトリを作成して履歴とナレッジを保存します：
+
+```
+project/
+├── .e8/
+│   ├── history.jsonl      # タスク単位の履歴
+│   ├── knowledge.jsonl    # プロジェクト単位のナレッジ
+│   └── logs/              # オプション: 生ログ
 ```
 
 ## 特徴
@@ -116,11 +121,11 @@ e8 run "タスク" --persist .e8/history.jsonl
 ## 依存関係
 
 - Python 3.13+
-- [claudecode-model](https://github.com/your-org/claudecode-model) - pydantic-ai アダプタ
-- pydantic >= 2.12
-- pydantic-ai >= 1.46
-- typer >= 0.21
+- pydantic-ai >= 1.46.0
+- [claudecode-model](https://github.com/drillan/claudecode-model) - pydantic-ai 用 Claude Code アダプタ
+- typer >= 0.21.1
 - duckdb >= 1.4.3
+- pyyaml >= 6.0.0
 
 ## ライセンス
 

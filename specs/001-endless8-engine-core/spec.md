@@ -139,6 +139,10 @@
 - **FR-025**: 実行エージェントは各イテレーション終了時にセマンティックメタデータ（approach, strategy_tags, discoveries）をJSON形式で報告しなければならない（append_system_prompt経由で指示）
 - **FR-026**: サマリエージェントは各イテレーション終了後、即座にstream-jsonから機械的メタデータを抽出し、実行エージェントの報告と統合してExecutionSummaryを生成しなければならない
 - **FR-027**: CLIは `--max-iterations <N>` オプションで最大イテレーション数を指定できなければならない（YAML設定より優先）
+- **FR-028**: CLIはタスク完了時にステータス、判定理由、成果物リストを表示しなければならない
+- **FR-029**: CLIは `--resume` オプションで最新タスクを再開、`--resume <task-id>` で特定タスクを再開できなければならない
+- **FR-030**: システムはタスクごとにディレクトリを作成し、履歴と生ログをタスク単位で分離しなければならない（`.e8/tasks/<task-id>/`）
+- **FR-031**: CLIは `e8 list` コマンドでタスク一覧を表示できなければならない
 
 ### Key Entities
 
@@ -157,8 +161,11 @@
 ### Measurable Outcomes
 
 - **SC-001**: 明確な完了条件を持つ単純なタスクは、3イテレーション以内に完了する
+  - 測定方法: `tests/integration/test_loop_execution.py` で「ファイル作成」などの単純タスクを実行し、イテレーション数を検証
 - **SC-002**: 50イテレーション以上の長時間タスクでもコンテキスト枯渇が発生しない
+  - 測定方法: 手動テストまたは専用の長時間テストスクリプトで検証（CI では除外）
 - **SC-003**: 履歴のサマリ化により、各イテレーションのコンテキストサイズが100,000 tokens以下に収まる
+  - 測定方法: ExecutionSummary.metadata.tokens_used を監視し、上限超過時にログ警告を出力
 - **SC-004**: 曖昧な完了条件の90%以上に対して、適切な明確化質問が生成される
 - **SC-005**: 中断されたタスクの100%が、履歴から正常に再開できる
 - **SC-006**: CLIからの実行結果がPython APIからの実行結果と同等である
@@ -177,9 +184,11 @@
 
 | 層 | ファイル | スコープ | 内容 | 用途 |
 |----|---------|---------|------|------|
-| 履歴 | `.e8/history.jsonl` | タスク単位 | ExecutionSummary | 次イテレーションへのコンテキスト注入 |
+| 履歴 | `.e8/tasks/<task-id>/history.jsonl` | タスク単位 | ExecutionSummary | 次イテレーションへのコンテキスト注入 |
 | ナレッジ | `.e8/knowledge.jsonl` | プロジェクト単位 | 発見、教訓、パターン | 各イテレーション開始時に参照、タスクをまたいで再利用 |
-| 生ログ | `.e8/logs/iteration-NNN.jsonl` | イテレーション単位 | stream-json全出力 | デバッグ・監査（オプション） |
+| 生ログ | `.e8/tasks/<task-id>/logs/iteration-NNN.jsonl` | イテレーション単位 | stream-json全出力 | デバッグ・監査（オプション） |
+
+**タスク ID**: タイムスタンプ形式（例: `2026-01-23T13-30-00`）で生成。各タスク実行時に新しいディレクトリが作成される。
 
 実行エージェントは `--output-format stream-json --verbose` でclaude CLIを呼び出し、サマリエージェントがその出力を解析してExecutionSummaryとKnowledgeを生成する。
 
@@ -286,12 +295,15 @@ uv tool install git+https://github.com/drillan/endless8.git
 
 - **コマンド名**: `e8`（endless8 の短縮形）
 - **プロジェクトディレクトリ**: カレントディレクトリをデフォルトとし、`--project <path>` オプションで上書き可能
+- **タスク再開**: `--resume` で最新タスクを再開、`--resume <task-id>` で特定タスクを再開
 - **使用例**:
   - `e8 run "タスクの説明" --criteria "条件1" --criteria "条件2"`
   - `e8 run --config task.yaml`
-  - `e8 run "タスク" --persist .e8/history.jsonl`
   - `e8 run "タスク" --project /path/to/project --criteria "条件"`
   - `e8 run "タスク" --max-iterations 20 --criteria "条件"`
+  - `e8 run --resume` （最新タスクを再開）
+  - `e8 run --resume 2026-01-23T13-30-00` （特定タスクを再開）
+  - `e8 list` （タスク一覧を表示）
 
 ### YAML 設定ファイル構造
 
@@ -383,3 +395,9 @@ prompts:
 - Q: User Story 1 の実用的なテストタスクは？ → A: タスク「テストカバレッジを90%以上にする」、完了条件「pytest --cov で90%以上」
 - Q: 非プログラミングタスクの User Story は？ → A: タスク「プロンプト最適化に関する論文を検索」、完了条件「3件以上の関連論文を発見し、概要をまとめる」
 - Q: CLIで最大イテレーション数を指定できるか？ → A: `--max-iterations <N>` オプションで指定可能（YAML設定より優先）
+- Q: 履歴ディレクトリ構造は？ → A: タスクごとにディレクトリを作成（`.e8/tasks/<task-id>/`）
+- Q: タスク ID の生成方法は？ → A: タイムスタンプ（例: `2026-01-23T13-30-00`）
+- Q: タスク再開時の ID 指定方法は？ → A: `--resume` で最新を自動選択、`--resume <task-id>` で特定タスクを指定（両方サポート）
+- Q: タスク完了時の CLI 表示内容は？ → A: ステータス + 判定理由 + 成果物リスト
+- Q: 古いタスクディレクトリのクリーンアップ方法は？ → A: 手動削除のみ（MVP では CLI コマンドなし）
+- Q: タスク一覧表示機能は？ → A: `e8 list` コマンドでタスク一覧を表示
