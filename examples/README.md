@@ -34,8 +34,8 @@ e8 run --config examples/basic.yaml --max-iterations 20
 ### オプション
 
 - `max_iterations`: 最大イテレーション数（デフォルト: 10）
-- `persist`: 履歴の永続化（true/false、デフォルト: false）
-  - true の場合、タスクディレクトリに自動保存
+- `persist`: 履歴ファイルパス（文字列、省略時は永続化なし）
+  - 例: `.e8/history.jsonl`
 - `knowledge`: ナレッジファイルパス（デフォルト: `.e8/knowledge.jsonl`）
 - `history_context_size`: 参照する履歴件数（デフォルト: 5）
 
