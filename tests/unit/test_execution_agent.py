@@ -198,3 +198,66 @@ class TestExecutionAgent:
             mock_create_model.assert_called_once()
             call_kwargs = mock_create_model.call_args
             assert call_kwargs.kwargs.get("allowed_tools") is None
+
+    async def test_execution_agent_passes_message_callback(
+        self,
+        execution_context: ExecutionContext,
+    ) -> None:
+        """Test that execution agent passes message_callback to model factory."""
+        from endless8.agents.execution import ExecutionAgent
+
+        def callback(message: object) -> None:
+            pass
+
+        with (
+            patch("endless8.agents.execution.Agent") as mock_agent_class,
+            patch("endless8.agents.execution.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=ExecutionResult(
+                    status=ExecutionStatus.SUCCESS,
+                    output="完了",
+                    artifacts=[],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = ExecutionAgent(message_callback=callback)
+            await agent.run(execution_context)
+
+            # Verify create_agent_model was called with message_callback
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("message_callback") is callback
+
+    async def test_execution_agent_without_message_callback(
+        self,
+        execution_context: ExecutionContext,
+    ) -> None:
+        """Test that execution agent works without message_callback."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with (
+            patch("endless8.agents.execution.Agent") as mock_agent_class,
+            patch("endless8.agents.execution.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=ExecutionResult(
+                    status=ExecutionStatus.SUCCESS,
+                    output="完了",
+                    artifacts=[],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = ExecutionAgent()  # No message_callback
+            await agent.run(execution_context)
+
+            # Verify create_agent_model was called with message_callback=None
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("message_callback") is None

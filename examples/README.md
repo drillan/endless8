@@ -24,6 +24,18 @@ e8 run --config examples/basic.yaml --max-iterations 20
 | `refactoring.yaml` | リファクタリングタスク |
 | `advanced.yaml` | 全オプションを含む詳細設定 |
 
+## CLI オプション一覧
+
+| オプション | 短縮形 | 説明 |
+|-----------|--------|------|
+| `--task` | `-t` | タスクの説明 |
+| `--criteria` | `-c` | 完了条件（複数指定可） |
+| `--max-iterations` | `-m` | 最大イテレーション数 |
+| `--config` | | YAML設定ファイル |
+| `--project` | `-p` | プロジェクトディレクトリ |
+| `--resume` | `-r` | タスクIDを指定して再開 |
+| `--verbose` | `-V` | 詳細な実行ログを表示 |
+
 ## 設定オプション一覧
 
 ### 必須

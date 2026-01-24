@@ -12,7 +12,7 @@ criteria:
   - "各句が5-7-5の形式になっている"
   - "秋に関連する内容が含まれている"
 
-max_iterations: 5
+max_iterations: 2
 
 # judgment は厳しく（細かい点まで評価）
 prompts:
