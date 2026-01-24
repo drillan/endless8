@@ -5,9 +5,12 @@ with support for claudecode-model when available.
 """
 
 import logging
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from claudecode_model import MessageCallbackType
 
 # Import claudecode-model adapter
 try:
@@ -25,6 +28,7 @@ def create_agent_model(
     max_turns: int = 10,
     allowed_tools: list[str] | None = None,
     timeout: float = 300.0,
+    message_callback: "MessageCallbackType | None" = None,
 ) -> Union["ClaudeCodeModel", str]:
     """Create an agent model for pydantic-ai.
 
@@ -36,13 +40,17 @@ def create_agent_model(
         max_turns: Maximum number of conversation turns for ClaudeCodeModel.
         allowed_tools: List of allowed tool names for ClaudeCodeModel.
         timeout: Timeout in seconds for SDK queries.
+        message_callback: Optional callback for message events.
 
     Returns:
         ClaudeCodeModel instance or model name string.
     """
     if _CLAUDECODE_AVAILABLE and ClaudeCodeModel is not None:
         return ClaudeCodeModel(
-            max_turns=max_turns, allowed_tools=allowed_tools, timeout=timeout
+            max_turns=max_turns,
+            allowed_tools=allowed_tools,
+            timeout=timeout,
+            message_callback=message_callback,
         )
     return model_name
 

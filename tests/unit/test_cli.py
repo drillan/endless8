@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from endless8.cli.main import app, version_callback
+from endless8.cli.main import _format_tool_call, app, version_callback
 from endless8.models import (
     CriteriaEvaluation,
     JudgmentResult,
@@ -542,3 +542,209 @@ class TestListStatus:
         assert "20240101-110000" in result.output
         # Total should be 2
         assert "合計: 2 タスク" in result.output
+
+
+class TestVerboseOption:
+    """Tests for --verbose option."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Create temporary directory."""
+        return tmp_path
+
+    def _create_completed_result(self, iterations: int = 1) -> LoopResult:
+        """Create a completed LoopResult with proper final_judgment."""
+        judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="条件を満たしている",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="タスク完了",
+        )
+        return LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=iterations,
+            final_judgment=judgment,
+        )
+
+    def test_verbose_option_accepted(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that --verbose option is accepted."""
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                    "--verbose",
+                ],
+            )
+
+            assert result.exit_code == 0
+
+    def test_verbose_short_option(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that -V short option works."""
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                    "-V",
+                ],
+            )
+
+            assert result.exit_code == 0
+
+    def test_verbose_passes_callback_to_execution_agent(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that verbose mode passes message_callback to ExecutionAgent."""
+        mock_result = self._create_completed_result()
+
+        with (
+            patch("endless8.cli.main.Engine") as mock_engine_class,
+            patch("endless8.cli.main.ExecutionAgent") as mock_exec_agent_class,
+        ):
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                    "--verbose",
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Verify ExecutionAgent was called with message_callback
+            mock_exec_agent_class.assert_called_once()
+            call_kwargs = mock_exec_agent_class.call_args
+            assert "message_callback" in call_kwargs.kwargs
+            assert call_kwargs.kwargs["message_callback"] is not None
+
+    def test_non_verbose_no_callback(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that non-verbose mode does not pass message_callback."""
+        mock_result = self._create_completed_result()
+
+        with (
+            patch("endless8.cli.main.Engine") as mock_engine_class,
+            patch("endless8.cli.main.ExecutionAgent") as mock_exec_agent_class,
+        ):
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            # Verify ExecutionAgent was called without message_callback or with None
+            mock_exec_agent_class.assert_called_once()
+            call_kwargs = mock_exec_agent_class.call_args
+            assert call_kwargs.kwargs.get("message_callback") is None
+
+
+class TestFormatToolCall:
+    """Tests for _format_tool_call helper function."""
+
+    def test_format_write_with_file_path(self) -> None:
+        """Test formatting Write tool with file_path."""
+        result = _format_tool_call("Write", {"file_path": "/path/to/file.txt"})
+        assert result == "Write: /path/to/file.txt"
+
+    def test_format_read_with_file_path(self) -> None:
+        """Test formatting Read tool with file_path."""
+        result = _format_tool_call("Read", {"file_path": "src/main.py"})
+        assert result == "Read: src/main.py"
+
+    def test_format_edit_with_file_path(self) -> None:
+        """Test formatting Edit tool with file_path."""
+        result = _format_tool_call("Edit", {"file_path": "config.yaml"})
+        assert result == "Edit: config.yaml"
+
+    def test_format_bash_with_command(self) -> None:
+        """Test formatting Bash tool with command."""
+        result = _format_tool_call("Bash", {"command": "ls -la"})
+        assert result == "Bash: ls -la"
+
+    def test_format_bash_with_long_command(self) -> None:
+        """Test formatting Bash tool with long command truncation."""
+        long_cmd = "a" * 50
+        result = _format_tool_call("Bash", {"command": long_cmd})
+        assert result == f"Bash: {'a' * 40}..."
+        assert len(result) < len(f"Bash: {long_cmd}")
+
+    def test_format_glob_with_pattern(self) -> None:
+        """Test formatting Glob tool with pattern."""
+        result = _format_tool_call("Glob", {"pattern": "**/*.py"})
+        assert result == "Glob: **/*.py"
+
+    def test_format_grep_with_pattern(self) -> None:
+        """Test formatting Grep tool with pattern."""
+        result = _format_tool_call("Grep", {"pattern": "TODO:"})
+        assert result == "Grep: TODO:"
+
+    def test_format_unknown_tool(self) -> None:
+        """Test formatting unknown tool returns just name."""
+        result = _format_tool_call("CustomTool", {"some_param": "value"})
+        assert result == "CustomTool"
+
+    def test_format_tool_without_expected_param(self) -> None:
+        """Test formatting tool without expected parameter returns just name."""
+        result = _format_tool_call("Write", {"content": "some content"})
+        assert result == "Write"
+
+    def test_format_tool_with_empty_param(self) -> None:
+        """Test formatting tool with empty parameter returns just name."""
+        result = _format_tool_call("Read", {"file_path": ""})
+        assert result == "Read"

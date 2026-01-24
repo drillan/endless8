@@ -145,6 +145,9 @@
 - **FR-031**: CLIは `e8 list` コマンドでタスク一覧を表示できなければならない
 - **FR-032**: システムは各イテレーション終了時に判定結果（JudgmentResult）を history.jsonl に `type: "judgment"` として即座に保存しなければならない
 - **FR-033**: システムはタスク終了時（completed, max_iterations, error, cancelled のいずれの場合も）に最終結果（LoopResult）を history.jsonl に `type: "final_result"` として保存しなければならない
+- **FR-034**: CLIは `--verbose` オプションで、実行中のツールコールとテキスト応答をリアルタイム表示できなければならない
+  - ツールコール: `→ ツール名` 形式
+  - テキスト応答: `📝 テキスト...` 形式（先頭80文字）
 
 ### Key Entities
 

@@ -6,11 +6,16 @@ The Execution Agent is responsible for:
 - Reporting semantic metadata
 """
 
+from typing import TYPE_CHECKING
+
 from pydantic_ai import Agent
 
 from endless8.agents import ExecutionContext
 from endless8.agents.model_factory import create_agent_model
 from endless8.models import ExecutionResult
+
+if TYPE_CHECKING:
+    from claudecode_model import MessageCallbackType
 
 EXECUTION_SYSTEM_PROMPT = """あなたはタスク実行エージェントです。
 
@@ -49,6 +54,7 @@ class ExecutionAgent:
         model_name: str = "anthropic:claude-sonnet-4-5",
         allowed_tools: list[str] | None = None,
         timeout: float = 300.0,
+        message_callback: "MessageCallbackType | None" = None,
     ) -> None:
         """Initialize the execution agent.
 
@@ -57,11 +63,13 @@ class ExecutionAgent:
             model_name: Name of the model to use for the agent.
             allowed_tools: List of allowed tool names for the agent.
             timeout: Timeout in seconds for SDK queries.
+            message_callback: Optional callback for message events.
         """
         self._append_system_prompt = append_system_prompt
         self._model_name = model_name
         self._allowed_tools = allowed_tools
         self._timeout = timeout
+        self._message_callback = message_callback
 
     def _build_prompt(self, context: ExecutionContext) -> str:
         """Build the execution prompt from context.
@@ -107,6 +115,7 @@ class ExecutionAgent:
             max_turns=50,
             allowed_tools=self._allowed_tools,
             timeout=self._timeout,
+            message_callback=self._message_callback,
         )
 
         agent: Agent[None, ExecutionResult] = Agent(
