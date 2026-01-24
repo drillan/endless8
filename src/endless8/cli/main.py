@@ -248,39 +248,52 @@ def run(
         if verbose:
 
             def on_message(message: "Message") -> None:
-                from claude_agent_sdk.types import (
-                    AssistantMessage,
-                    StreamEvent,
-                    TextBlock,
-                    ToolUseBlock,
-                )
+                try:
+                    from claude_agent_sdk.types import (
+                        AssistantMessage,
+                        StreamEvent,
+                        TextBlock,
+                        ToolUseBlock,
+                    )
 
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, ToolUseBlock):
-                            # Skip internal pydantic-ai tools (case-insensitive)
-                            if block.name.lower() == "structuredoutput":
-                                continue
-                            # Format tool call with key input parameters
-                            tool_display = _format_tool_call(block.name, block.input)
-                            typer.echo(f"    → {tool_display}")
-                        elif isinstance(block, TextBlock):
-                            text = block.text[:80]
-                            if len(block.text) > 80:
-                                text += "..."
-                            typer.echo(f"    📝 {text}")
-                elif isinstance(message, StreamEvent):
-                    event = message.event
-                    event_type = event.get("type", "")
-                    # Handle content_block_start for tool_use
-                    if event_type == "content_block_start":
-                        content_block = event.get("content_block", {})
-                        block_type = content_block.get("type", "")
-                        if block_type == "tool_use":
-                            tool_name = content_block.get("name", "")
-                            # Skip internal pydantic-ai tools (case-insensitive)
-                            if tool_name and tool_name.lower() != "structuredoutput":
-                                typer.echo(f"    → {tool_name}")
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content or []:
+                            if isinstance(block, ToolUseBlock):
+                                # Skip internal pydantic-ai tools (case-insensitive)
+                                if block.name.lower() == "structuredoutput":
+                                    continue
+                                # Format tool call with key input parameters
+                                tool_input = (
+                                    block.input if isinstance(block.input, dict) else {}
+                                )
+                                tool_display = _format_tool_call(block.name, tool_input)
+                                typer.echo(f"    → {tool_display}")
+                            elif isinstance(block, TextBlock):
+                                if block.text:
+                                    text = block.text[:80]
+                                    if len(block.text) > 80:
+                                        text += "..."
+                                    typer.echo(f"    📝 {text}")
+                    elif isinstance(message, StreamEvent):
+                        event = message.event
+                        if not isinstance(event, dict):
+                            return
+                        event_type = event.get("type", "")
+                        # Handle content_block_start for tool_use
+                        if event_type == "content_block_start":
+                            content_block = event.get("content_block", {})
+                            block_type = content_block.get("type", "")
+                            if block_type == "tool_use":
+                                tool_name = content_block.get("name", "")
+                                # Skip internal pydantic-ai tools (case-insensitive)
+                                if (
+                                    tool_name
+                                    and tool_name.lower() != "structuredoutput"
+                                ):
+                                    typer.echo(f"    → {tool_name}")
+                except Exception as e:
+                    # Log error but don't interrupt main execution
+                    logger.warning("Verbose callback error (ignored): %s", e)
 
             message_callback = on_message
 

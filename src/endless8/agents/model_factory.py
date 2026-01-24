@@ -52,6 +52,13 @@ def create_agent_model(
             timeout=timeout,
             message_callback=message_callback,
         )
+
+    # claudecode-model is not available
+    if message_callback is not None:
+        logger.warning(
+            "message_callback was specified but claudecode-model is not available. "
+            "Verbose output will not be displayed."
+        )
     return model_name
 
 
