@@ -8,6 +8,7 @@ The Summary Agent is responsible for:
 """
 
 import json
+import logging
 from datetime import UTC, datetime
 
 from endless8.models import (
@@ -19,6 +20,8 @@ from endless8.models import (
     NextAction,
     SummaryMetadata,
 )
+
+logger = logging.getLogger(__name__)
 
 SUMMARY_SYSTEM_PROMPT = """あなたはサマリエージェントです。
 
@@ -65,7 +68,12 @@ def _parse_tools_from_log(raw_log: str) -> list[str]:
                 tool_name = data.get("name", "")
                 if tool_name:
                     tools.add(tool_name)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Invalid JSON in log line (skipped): %s - Error: %s",
+                line[:100],
+                e,
+            )
             continue
     return sorted(tools)
 
@@ -93,7 +101,12 @@ def _parse_files_from_log(raw_log: str) -> list[str]:
                     path = tool_input.get("path", "") or tool_input.get("file_path", "")
                     if path:
                         files.add(path)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Invalid JSON in log line (skipped): %s - Error: %s",
+                line[:100],
+                e,
+            )
             continue
     return sorted(files)
 
@@ -118,7 +131,12 @@ def _parse_tokens_from_log(raw_log: str) -> int:
                 usage = data["usage"]
                 total_tokens += usage.get("input_tokens", 0)
                 total_tokens += usage.get("output_tokens", 0)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Invalid JSON in log line (skipped): %s - Error: %s",
+                line[:100],
+                e,
+            )
             continue
     return total_tokens
 

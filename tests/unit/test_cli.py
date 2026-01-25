@@ -35,11 +35,6 @@ class TestVersionCallback:
 class TestMainCallback:
     """Tests for main callback function."""
 
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
     def test_main_help_shows_description(self, runner: CliRunner) -> None:
         """Test that main --help shows description."""
         result = runner.invoke(app, ["--help"])
@@ -56,16 +51,6 @@ class TestMainCallback:
 
 class TestRunCommand:
     """Tests for run command."""
-
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
 
     def test_run_requires_task_or_config(
         self, runner: CliRunner, temp_dir: Path
@@ -271,16 +256,6 @@ class TestRunCommand:
 class TestListCommand:
     """Tests for list command."""
 
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
-
     def test_list_no_tasks(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test list with no tasks."""
         result = runner.invoke(app, ["list", "--project", str(temp_dir)])
@@ -314,16 +289,6 @@ class TestListCommand:
 
 class TestStatusCommand:
     """Tests for status command."""
-
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
 
     def test_status_no_e8_dir(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test status with no .e8 directory."""
@@ -369,16 +334,6 @@ class TestStatusCommand:
 
 class TestResumeOption:
     """Tests for --resume option."""
-
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
 
     def test_resume_nonexistent_task(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that resume with nonexistent task_id returns error."""
@@ -480,16 +435,6 @@ class TestResumeOption:
 class TestListStatus:
     """Tests for list command status display."""
 
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
-
     def test_list_completed_status(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that completed task shows appropriate status."""
         import json
@@ -546,16 +491,6 @@ class TestListStatus:
 
 class TestVerboseOption:
     """Tests for --verbose option."""
-
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
 
     def _create_completed_result(self, iterations: int = 1) -> LoopResult:
         """Create a completed LoopResult with proper final_judgment."""
@@ -753,16 +688,6 @@ class TestFormatToolCall:
 class TestConfigFileOverride:
     """Tests for config file option override."""
 
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
-
     def _create_completed_result(self, iterations: int = 1) -> LoopResult:
         """Create a completed LoopResult with proper final_judgment."""
         judgment = JudgmentResult(
@@ -918,9 +843,7 @@ class TestConfigFileOverride:
         assert result.exit_code == 1
         assert "見つかりません" in result.output or "not" in result.output.lower()
 
-    def test_config_file_invalid_error(
-        self, runner: CliRunner, temp_dir: Path
-    ) -> None:
+    def test_config_file_invalid_error(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test error message when config file is invalid."""
         import yaml
 
@@ -946,16 +869,6 @@ class TestConfigFileOverride:
 
 class TestProgressCallbackEvents:
     """Tests for progress_callback event handling."""
-
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
 
     def test_run_cancelled_status(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that run shows cancelled status."""
@@ -1190,16 +1103,6 @@ class TestProgressCallbackEvents:
 class TestListCommandStatusParsing:
     """Tests for list command status parsing."""
 
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
-
     def test_list_with_no_history_file(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test list with task directory but no history file."""
         tasks_dir = temp_dir / ".e8" / "tasks"
@@ -1269,16 +1172,6 @@ class TestListCommandStatusParsing:
 
 class TestStatusCommandKnowledge:
     """Tests for status command knowledge handling."""
-
-    @pytest.fixture
-    def runner(self) -> CliRunner:
-        """Create CLI test runner."""
-        return CliRunner()
-
-    @pytest.fixture
-    def temp_dir(self, tmp_path: Path) -> Path:
-        """Create temporary directory."""
-        return tmp_path
 
     def test_status_with_no_knowledge_file(
         self, runner: CliRunner, temp_dir: Path

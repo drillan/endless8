@@ -733,6 +733,7 @@ class TestKnowledgeContextSize:
             criteria=["条件"],
         )
         # Should have a configured default (not hardcoded 10 in engine)
+        assert config.knowledge_context_size == 10
 
     async def test_in_memory_knowledge_fallback(
         self,
@@ -815,4 +816,3 @@ class TestKnowledgeContextSize:
 
         # Should return "ナレッジなし"
         assert context == "ナレッジなし"
-        assert config.knowledge_context_size >= 1
