@@ -239,3 +239,74 @@ class TestGetLastIteration:
         last_iter = get_last_iteration(invalid_history_jsonl)
 
         assert last_iter == 0
+
+
+class TestTimestampHandling:
+    """Tests for timestamp handling in queries."""
+
+    def test_query_history_with_string_timestamp(self, tmp_path: Path) -> None:
+        """Should handle string timestamps."""
+        history_path = tmp_path / "history.jsonl"
+        records = [
+            {
+                "type": "summary",
+                "iteration": 1,
+                "approach": "Test",
+                "result": "success",
+                "reason": "Done",
+                "artifacts": [],
+                "timestamp": "2026-01-23T10:00:00Z",  # String timestamp
+            }
+        ]
+        with history_path.open("w", encoding="utf-8") as f:
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        summaries = query_history_context(history_path, limit=5)
+        assert len(summaries) == 1
+        # DuckDB may parse and reformat the timestamp
+        assert summaries[0].timestamp.startswith("2026-01-23T10:00:00")
+
+    def test_query_history_with_null_timestamp(self, tmp_path: Path) -> None:
+        """Should handle null timestamps."""
+        history_path = tmp_path / "history.jsonl"
+        records = [
+            {
+                "type": "summary",
+                "iteration": 1,
+                "approach": "Test",
+                "result": "success",
+                "reason": "Done",
+                "artifacts": [],
+                "timestamp": None,  # Null timestamp
+            }
+        ]
+        with history_path.open("w", encoding="utf-8") as f:
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        summaries = query_history_context(history_path, limit=5)
+        assert len(summaries) == 1
+        assert summaries[0].timestamp == ""
+
+    def test_query_failures_with_null_timestamp(self, tmp_path: Path) -> None:
+        """Should handle null timestamps in failures."""
+        history_path = tmp_path / "history.jsonl"
+        records = [
+            {
+                "type": "summary",
+                "iteration": 1,
+                "approach": "Test",
+                "result": "failure",
+                "reason": "Failed",
+                "artifacts": [],
+                "timestamp": None,  # Null timestamp
+            }
+        ]
+        with history_path.open("w", encoding="utf-8") as f:
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        failures = query_failures(history_path)
+        assert len(failures) == 1
+        assert failures[0].timestamp == ""

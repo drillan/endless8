@@ -21,7 +21,6 @@ criteria:
   - "各条件との対応が説明されている"
 
 max_iterations: 5
-persist: true
 
 # judgment は厳しく
 prompts:

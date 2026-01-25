@@ -132,3 +132,53 @@ class TestSummaryAgent:
         # Failure should have next action
         assert summary.next is not None
         assert summary.next.suggested_action is not None
+
+    async def test_summary_agent_handles_malformed_json_in_log(
+        self,
+        execution_result: ExecutionResult,
+    ) -> None:
+        """Test that summary agent handles malformed JSON in raw log gracefully."""
+        from endless8.agents.summary import SummaryAgent
+
+        # Mix of valid and invalid JSON lines
+        raw_log = """
+        {"type":"tool_use","name":"Read","input":{"path":"src/main.py"}}
+        {invalid json line
+        {"type":"tool_use","name":"Edit","input":{"path":"tests/test_main.py"}}
+        not even json
+        {"usage":{"input_tokens":100,"output_tokens":50}}
+        """
+
+        agent = SummaryAgent(task_description="テスト")
+        summary, _ = await agent.run(
+            execution_result, iteration=1, raw_log_content=raw_log
+        )
+
+        # Should still extract valid tools despite malformed lines
+        assert "Read" in summary.metadata.tools_used
+        assert "Edit" in summary.metadata.tools_used
+        # Should still parse token usage
+        assert summary.metadata.tokens_used > 0
+
+    async def test_summary_agent_parses_files_from_log(
+        self,
+        execution_result: ExecutionResult,
+    ) -> None:
+        """Test that summary agent extracts modified files from log."""
+        from endless8.agents.summary import SummaryAgent
+
+        raw_log = """
+        {"type":"tool_use","name":"Write","input":{"file_path":"src/new_file.py","content":"..."}}
+        {"type":"tool_use","name":"Edit","input":{"file_path":"src/existing.py","old_string":"...","new_string":"..."}}
+        {"type":"tool_use","name":"Read","input":{"file_path":"src/read_only.py"}}
+        """
+
+        agent = SummaryAgent(task_description="テスト")
+        summary, _ = await agent.run(
+            execution_result, iteration=1, raw_log_content=raw_log
+        )
+
+        # Only Write and Edit tools should be counted as file modifications
+        assert "src/new_file.py" in summary.metadata.files_modified
+        assert "src/existing.py" in summary.metadata.files_modified
+        assert "src/read_only.py" not in summary.metadata.files_modified

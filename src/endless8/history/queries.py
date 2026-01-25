@@ -68,10 +68,17 @@ def query_history_context(
             summaries.append(summary)
         return summaries
     except DuckDBError as e:
-        logger.warning("DuckDB query failed in query_history_context: %s", e)
+        logger.error(
+            "DuckDB query failed in query_history_context (path: %s): %s",
+            path,
+            e,
+        )
         return []
-    except Exception as e:
-        logger.warning("Unexpected error in query_history_context: %s", e)
+    except Exception:
+        logger.exception(
+            "Unexpected error in query_history_context (path: %s)",
+            path,
+        )
         return []
 
 
@@ -140,10 +147,17 @@ def query_failures(
             summaries.append(summary)
         return summaries
     except DuckDBError as e:
-        logger.warning("DuckDB query failed in query_failures: %s", e)
+        logger.error(
+            "DuckDB query failed in query_failures (path: %s): %s",
+            path,
+            e,
+        )
         return []
-    except Exception as e:
-        logger.warning("Unexpected error in query_failures: %s", e)
+    except Exception:
+        logger.exception(
+            "Unexpected error in query_failures (path: %s)",
+            path,
+        )
         return []
 
 
@@ -170,10 +184,17 @@ def count_iterations(history_path: str | Path) -> int:
         result = duckdb.execute(query, [str(path)]).fetchone()
         return result[0] if result else 0
     except DuckDBError as e:
-        logger.warning("DuckDB query failed in count_iterations: %s", e)
+        logger.error(
+            "DuckDB query failed in count_iterations (path: %s): %s",
+            path,
+            e,
+        )
         return 0
-    except Exception as e:
-        logger.warning("Unexpected error in count_iterations: %s", e)
+    except Exception:
+        logger.exception(
+            "Unexpected error in count_iterations (path: %s)",
+            path,
+        )
         return 0
 
 
@@ -200,10 +221,17 @@ def get_last_iteration(history_path: str | Path) -> int:
         result = duckdb.execute(query, [str(path)]).fetchone()
         return result[0] if result and result[0] else 0
     except DuckDBError as e:
-        logger.warning("DuckDB query failed in get_last_iteration: %s", e)
+        logger.error(
+            "DuckDB query failed in get_last_iteration (path: %s): %s",
+            path,
+            e,
+        )
         return 0
-    except Exception as e:
-        logger.warning("Unexpected error in get_last_iteration: %s", e)
+    except Exception:
+        logger.exception(
+            "Unexpected error in get_last_iteration (path: %s)",
+            path,
+        )
         return 0
 
 
