@@ -158,7 +158,7 @@
 - **Knowledge**: 永続的なナレッジエントリ。タイプ: discovery（発見）, lesson（教訓）, pattern（共通パターン）, constraint（制約）, codebase（構造知見）
 - **JudgmentResult**: 判定エージェントの出力。完了判定、各条件の評価、次のアクション提案を含む
 - **History**: 履歴を管理するクラス。サマリのリストを保持し、コンテキスト生成と永続化を担当
-- **KnowledgeBase**: ナレッジを管理するクラス。プロジェクト単位で永続化し、タスクをまたいで再利用
+- **KnowledgeBase**: ナレッジを管理するクラス。タスク単位で永続化
 - **LoopResult**: ループ全体の最終結果。成功/失敗、理由、履歴を含む
 
 ## Success Criteria *(mandatory)*
@@ -190,7 +190,7 @@
 | 層 | ファイル | スコープ | 内容 | 用途 |
 |----|---------|---------|------|------|
 | 履歴 | `.e8/tasks/<task-id>/history.jsonl` | タスク単位 | ExecutionSummary | 次イテレーションへのコンテキスト注入 |
-| ナレッジ | `.e8/knowledge.jsonl` | プロジェクト単位 | 発見、教訓、パターン | 各イテレーション開始時に参照、タスクをまたいで再利用 |
+| ナレッジ | `.e8/tasks/<task-id>/knowledge.jsonl` | タスク単位 | 発見、教訓、パターン | 各イテレーション開始時に参照 |
 | 生ログ | `.e8/tasks/<task-id>/logs/iteration-NNN.jsonl` | イテレーション単位 | stream-json全出力 | デバッグ・監査（オプション） |
 
 **タスク ID**: タイムスタンプ形式（例: `2026-01-23T13-30-00`）で生成。各タスク実行時に新しいディレクトリが作成される。
@@ -358,7 +358,7 @@ criteria:
 # オプション
 max_iterations: 10
 persist: ".e8/history.jsonl"
-knowledge: ".e8/knowledge.jsonl"  # ナレッジベース（プロジェクト単位）
+knowledge_context_size: 10        # 参照するナレッジの件数（デフォルト: 10）
 history_context_size: 5           # 直近N件の履歴を参照（デフォルト: 5）
 
 # ログオプション（3層構造）

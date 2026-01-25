@@ -98,9 +98,11 @@ endless8 はプロジェクトディレクトリに `.e8/` ディレクトリを
 ```
 project/
 ├── .e8/
-│   ├── history.jsonl      # タスク単位の履歴
-│   ├── knowledge.jsonl    # プロジェクト単位のナレッジ
-│   └── logs/              # オプション: 生ログ
+│   └── tasks/
+│       └── <task-id>/
+│           ├── history.jsonl      # タスクの履歴
+│           ├── knowledge.jsonl    # タスクのナレッジ
+│           └── logs/              # オプション: 生ログ
 ```
 
 ## 特徴
