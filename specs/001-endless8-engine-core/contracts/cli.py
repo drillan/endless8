@@ -151,8 +151,8 @@ def status(
 #
 # # オプション
 # max_iterations: 10
-# knowledge: ".e8/knowledge.jsonl"
 # history_context_size: 5
+# knowledge_context_size: 10
 #
 # # ログオプション
 # logging:
@@ -183,17 +183,11 @@ def status(
 # =====================
 #
 # .e8/
-# ├── knowledge.jsonl              # プロジェクト単位のナレッジ
 # └── tasks/
-#     ├── 2026-01-23T10-00-00/     # タスクID（タイムスタンプ形式）
-#     │   ├── history.jsonl        # タスクの履歴
-#     │   ├── config.yaml          # タスク設定のスナップショット
-#     │   └── logs/                # オプション: 生ログ
-#     │       ├── iteration-001.jsonl
-#     │       └── iteration-002.jsonl
-#     └── 2026-01-23T13-30-00/     # 別のタスク
-#         ├── history.jsonl
-#         └── ...
+#     └── <task-id>/
+#         ├── history.jsonl        # タスクの履歴
+#         ├── knowledge.jsonl      # タスクのナレッジ
+#         └── logs/                # オプション: 生ログ
 
 
 # =====================

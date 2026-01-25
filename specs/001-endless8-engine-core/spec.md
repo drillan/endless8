@@ -303,7 +303,7 @@ SELECT approach, reason FROM read_json_auto('.e8/history.jsonl')
 WHERE type = 'summary' AND result = 'failure'
 
 -- 高信頼度のパターンを取得
-SELECT content, example_file FROM read_json_auto('.e8/knowledge.jsonl')
+SELECT content, example_file FROM read_json_auto('.e8/tasks/<task-id>/knowledge.jsonl')
 WHERE type = 'pattern' AND confidence = 'high'
 
 -- 特定ファイルに関連する履歴を検索
@@ -419,7 +419,7 @@ prompts:
 - Q: YAML設定ファイルでallowed_toolsを定義できるか？ → A: はい、claude_options.allowed_toolsで定義可能
 - Q: 実行ログの記録方式は？ → A: 2層構造（履歴: サマリのみ、生ログ: オプションでstream-json全出力を保存）
 - Q: 判定エージェントのプロンプトをカスタマイズできるか？ → A: はい、prompts.judgmentで定義可能
-- Q: ナレッジの永続化方式は？ → A: 3層構造（履歴: タスク単位、ナレッジ: プロジェクト単位で別ファイル、生ログ: オプション）
+- Q: ナレッジの永続化方式は？ → A: 3層構造（履歴: タスク単位、ナレッジ: タスク単位で別ファイル、生ログ: オプション）
 - Q: ナレッジのタイプは？ → A: discovery, lesson, pattern, constraint, codebase の5タイプ
 - Q: 履歴・ナレッジのクエリ方法は？ → A: DuckDBでJSONLを直接SQLクエリ
 - Q: メタデータの取得方法は？ → A: ハイブリッドアプローチ（機械的データはstream-json、セマンティックデータはappend_system_prompt）

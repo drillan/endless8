@@ -174,11 +174,11 @@ WHERE type = 'summary' AND result = 'failure' AND iteration NOT IN (
 ```sql
 -- 高信頼度パターンの取得
 SELECT content, example_file
-FROM read_ndjson_auto('.e8/knowledge.jsonl')
+FROM read_ndjson_auto('.e8/tasks/<task-id>/knowledge.jsonl')
 WHERE type = 'pattern' AND confidence = 'high';
 
 -- 特定カテゴリのナレッジ検索
-SELECT * FROM read_ndjson_auto('.e8/knowledge.jsonl')
+SELECT * FROM read_ndjson_auto('.e8/tasks/<task-id>/knowledge.jsonl')
 WHERE type = 'lesson' AND category = 'error_handling';
 ```
 
@@ -287,8 +287,8 @@ class EngineConfig(BaseSettings):
     criteria: list[str]
     max_iterations: int = 10
     persist: str | None = None
-    knowledge: str = ".e8/knowledge.jsonl"
     history_context_size: int = 5
+    knowledge_context_size: int = 10
     logging: LoggingOptions = LoggingOptions()
     claude_options: ClaudeOptions = ClaudeOptions()
     prompts: PromptsConfig = PromptsConfig()

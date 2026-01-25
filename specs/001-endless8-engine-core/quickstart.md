@@ -143,8 +143,8 @@ criteria:
 # オプション
 max_iterations: 10          # 最大イテレーション数（デフォルト: 10）
 persist: ".e8/history.jsonl" # 履歴ファイルパス
-knowledge: ".e8/knowledge.jsonl"  # ナレッジファイルパス
 history_context_size: 5     # 参照する履歴件数（デフォルト: 5）
+knowledge_context_size: 10  # 参照するナレッジ件数（デフォルト: 10）
 
 # ログオプション
 logging:
@@ -198,16 +198,11 @@ prompts:
 ```
 project/
 ├── .e8/
-│   ├── knowledge.jsonl    # プロジェクト単位のナレッジ
 │   └── tasks/
-│       ├── 2026-01-23T10-00-00/   # タスクID（タイムスタンプ）
-│       │   ├── history.jsonl      # タスクの履歴
-│       │   ├── config.yaml        # 設定スナップショット
-│       │   └── logs/              # オプション: 生ログ
-│       │       ├── iteration-001.jsonl
-│       │       └── iteration-002.jsonl
-│       └── 2026-01-23T13-30-00/   # 別のタスク
-│           └── ...
+│       └── <task-id>/
+│           ├── history.jsonl      # タスクの履歴
+│           ├── knowledge.jsonl    # タスクのナレッジ
+│           └── logs/              # オプション: 生ログ
 └── task.yaml              # 設定ファイル（オプション）
 ```
 
