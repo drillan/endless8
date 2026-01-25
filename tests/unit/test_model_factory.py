@@ -157,3 +157,21 @@ class TestCreateAgentModel:
 
             # Should return model string, callback is ignored
             assert model == "anthropic:claude-sonnet-4-5"
+
+
+class TestIsClaudeCodeAvailable:
+    """Tests for is_claudecode_available function."""
+
+    def test_is_claudecode_available_returns_true_when_available(self) -> None:
+        """Test that is_claudecode_available returns True when available."""
+        from endless8.agents.model_factory import is_claudecode_available
+
+        with patch("endless8.agents.model_factory._CLAUDECODE_AVAILABLE", True):
+            assert is_claudecode_available() is True
+
+    def test_is_claudecode_available_returns_false_when_unavailable(self) -> None:
+        """Test that is_claudecode_available returns False when unavailable."""
+        from endless8.agents.model_factory import is_claudecode_available
+
+        with patch("endless8.agents.model_factory._CLAUDECODE_AVAILABLE", False):
+            assert is_claudecode_available() is False

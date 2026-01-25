@@ -13,8 +13,7 @@ criteria:
   - "月に関連する表現が含まれている"
 
 max_iterations: 6
-persist: true
-history_context_size: 5
+history_context_size: 3
 
 # judgment は厳しく
 prompts:

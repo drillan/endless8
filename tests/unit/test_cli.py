@@ -748,3 +748,545 @@ class TestFormatToolCall:
         """Test formatting tool with empty parameter returns just name."""
         result = _format_tool_call("Read", {"file_path": ""})
         assert result == "Read"
+
+
+class TestConfigFileOverride:
+    """Tests for config file option override."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Create temporary directory."""
+        return tmp_path
+
+    def _create_completed_result(self, iterations: int = 1) -> LoopResult:
+        """Create a completed LoopResult with proper final_judgment."""
+        judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="条件を満たしている",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="タスク完了",
+        )
+        return LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=iterations,
+            final_judgment=judgment,
+        )
+
+    def test_cli_task_overrides_config_task(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that CLI --task option overrides config file task."""
+        import yaml
+
+        # Create config file
+        config_file = temp_dir / "config.yaml"
+        config_data = {
+            "task": "Config task",
+            "criteria": ["Config criterion"],
+            "max_iterations": 5,
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--task",
+                    "CLI task",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            # CLI task should override
+            assert "タスク: CLI task" in result.output
+            assert "Config task" not in result.output
+
+    def test_cli_criteria_overrides_config_criteria(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that CLI --criteria option overrides config file criteria."""
+        import yaml
+
+        # Create config file
+        config_file = temp_dir / "config.yaml"
+        config_data = {
+            "task": "Test task",
+            "criteria": ["Config criterion 1", "Config criterion 2"],
+            "max_iterations": 5,
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--criteria",
+                    "CLI criterion",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            # CLI criteria should override
+            assert "CLI criterion" in result.output
+            assert "Config criterion" not in result.output
+
+    def test_cli_max_iterations_overrides_config_max_iterations(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that CLI --max-iterations overrides config file."""
+        import yaml
+
+        # Create config file
+        config_file = temp_dir / "config.yaml"
+        config_data = {
+            "task": "Test task",
+            "criteria": ["Test criterion"],
+            "max_iterations": 5,
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--max-iterations",
+                    "15",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            # CLI max_iterations should override
+            assert "最大イテレーション: 15" in result.output
+            assert "最大イテレーション: 5" not in result.output
+
+    def test_config_file_not_found_error(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test error message when config file is not found."""
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--config",
+                str(temp_dir / "nonexistent.yaml"),
+                "--project",
+                str(temp_dir),
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "見つかりません" in result.output or "not" in result.output.lower()
+
+    def test_config_file_invalid_error(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test error message when config file is invalid."""
+        import yaml
+
+        # Create config file with missing required fields
+        config_file = temp_dir / "config.yaml"
+        # This is valid YAML but invalid for our schema (missing task/criteria)
+        config_file.write_text(yaml.dump({"max_iterations": 5}))
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--config",
+                str(config_file),
+                "--project",
+                str(temp_dir),
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "不正" in result.output or "エラー" in result.output
+
+
+class TestProgressCallbackEvents:
+    """Tests for progress_callback event handling."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Create temporary directory."""
+        return tmp_path
+
+    def test_run_cancelled_status(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that run shows cancelled status."""
+        mock_result = LoopResult(
+            status=LoopStatus.CANCELLED,
+            iterations_used=1,
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert "キャンセル" in result.output
+
+    def test_run_tool_mismatch_error(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that run shows tool mismatch error details."""
+        from endless8.models import IntakeResult, IntakeStatus
+
+        intake_result = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="Test task",
+            criteria=["Criterion 1"],
+            suggested_tools=["Bash", "Write", "Read"],
+        )
+
+        mock_result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message="Tool mismatch detected",
+            intake_result=intake_result,
+        )
+
+        with (
+            patch("endless8.cli.main.Engine") as mock_engine_class,
+            patch("endless8.cli.main.load_config") as mock_load_config,
+        ):
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            # Create minimal config
+            from endless8.config import ClaudeOptions, EngineConfig
+
+            mock_config = EngineConfig(
+                task="Test task",
+                criteria=["Criterion 1"],
+                max_iterations=10,
+                claude_options=ClaudeOptions(allowed_tools=["Bash"]),
+            )
+
+            import yaml
+
+            config_file = temp_dir / "config.yaml"
+            config_file.write_text(yaml.dump({"task": "t", "criteria": ["c"]}))
+
+            # Mock load_config to return our config
+            mock_load_config.return_value = mock_config
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert "ツール設定エラー" in result.output
+            assert "必要なツール" in result.output
+            assert "不足" in result.output
+
+    def test_run_with_final_judgment_shows_evaluations(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that run shows evaluation details when final_judgment exists."""
+        judgment = JudgmentResult(
+            is_complete=False,  # Changed to False since not all criteria are met
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件1",
+                    is_met=True,
+                    evidence="達成されました",
+                    confidence=0.95,
+                ),
+                CriteriaEvaluation(
+                    criterion="条件2",
+                    is_met=False,
+                    evidence="未達成です",
+                    confidence=0.80,
+                ),
+            ],
+            overall_reason="一部完了",
+        )
+
+        mock_result = LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=2,
+            final_judgment=judgment,
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert "条件1" in result.output
+            assert "条件2" in result.output
+            assert "達成されました" in result.output
+            assert "未達成です" in result.output
+            assert "95%" in result.output or "0.95" in result.output
+            assert "80%" in result.output or "0.80" in result.output
+
+    def test_run_incomplete_shows_suggested_next_action(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that incomplete task shows suggested next action."""
+        judgment = JudgmentResult(
+            is_complete=False,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=False,
+                    evidence="未達成",
+                    confidence=0.90,
+                )
+            ],
+            overall_reason="未完了",
+            suggested_next_action="次のステップを実行してください",
+        )
+
+        mock_result = LoopResult(
+            status=LoopStatus.MAX_ITERATIONS,
+            iterations_used=10,
+            final_judgment=judgment,
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert "推奨アクション" in result.output
+            assert "次のステップを実行してください" in result.output
+
+    def test_run_shows_history_path(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test that run shows history path."""
+        judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+        history_path = temp_dir / ".e8" / "tasks" / "20240101-120000" / "history.jsonl"
+        mock_result = LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=1,
+            final_judgment=judgment,
+            history_path=str(history_path),  # Convert Path to string
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert "履歴:" in result.output
+            assert "history.jsonl" in result.output
+
+
+class TestListCommandStatusParsing:
+    """Tests for list command status parsing."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Create temporary directory."""
+        return tmp_path
+
+    def test_list_with_no_history_file(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test list with task directory but no history file."""
+        tasks_dir = temp_dir / ".e8" / "tasks"
+        task_dir = tasks_dir / "20240101-120000"
+        task_dir.mkdir(parents=True)
+
+        result = runner.invoke(app, ["list", "--project", str(temp_dir)])
+        assert result.exit_code == 0
+        assert "20240101-120000" in result.output
+        assert "unknown" in result.output
+
+    def test_list_with_failure_status(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test list with failure status."""
+        import json
+
+        tasks_dir = temp_dir / ".e8" / "tasks"
+        task_dir = tasks_dir / "20240101-120000"
+        task_dir.mkdir(parents=True)
+
+        history_file = task_dir / "history.jsonl"
+        history_data = {"result": "failure", "iteration": 1}
+        history_file.write_text(json.dumps(history_data) + "\n")
+
+        result = runner.invoke(app, ["list", "--project", str(temp_dir)])
+        assert result.exit_code == 0
+        assert "20240101-120000" in result.output
+        assert "failed" in result.output
+
+    def test_list_with_error_status(self, runner: CliRunner, temp_dir: Path) -> None:
+        """Test list with error status."""
+        import json
+
+        tasks_dir = temp_dir / ".e8" / "tasks"
+        task_dir = tasks_dir / "20240101-120000"
+        task_dir.mkdir(parents=True)
+
+        history_file = task_dir / "history.jsonl"
+        history_data = {"result": "error", "iteration": 1}
+        history_file.write_text(json.dumps(history_data) + "\n")
+
+        result = runner.invoke(app, ["list", "--project", str(temp_dir)])
+        assert result.exit_code == 0
+        assert "20240101-120000" in result.output
+        assert "error" in result.output
+
+    def test_list_shows_last_modified_time(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that list shows last modified time."""
+        import json
+
+        tasks_dir = temp_dir / ".e8" / "tasks"
+        task_dir = tasks_dir / "20240101-120000"
+        task_dir.mkdir(parents=True)
+
+        history_file = task_dir / "history.jsonl"
+        history_data = {"result": "success", "iteration": 1}
+        history_file.write_text(json.dumps(history_data) + "\n")
+
+        result = runner.invoke(app, ["list", "--project", str(temp_dir)])
+        assert result.exit_code == 0
+        # Should show timestamp in YYYY-MM-DD HH:MM:SS format
+        import re
+
+        assert re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", result.output)
+
+
+class TestStatusCommandKnowledge:
+    """Tests for status command knowledge handling."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create CLI test runner."""
+        return CliRunner()
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Create temporary directory."""
+        return tmp_path
+
+    def test_status_with_no_knowledge_file(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test status when knowledge file doesn't exist."""
+        e8_dir = temp_dir / ".e8"
+        e8_dir.mkdir()
+
+        result = runner.invoke(app, ["status", "--project", str(temp_dir)])
+        assert result.exit_code == 0
+        assert "ナレッジエントリ: 0" in result.output

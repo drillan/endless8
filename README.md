@@ -87,7 +87,7 @@ e8 run -t "タスク" -c "条件" --max-iterations 5
 | `--criteria` | `-c` | 完了条件（複数指定可） |
 | `--project` | `-p` | プロジェクトディレクトリ |
 | `--max-iterations` | `-m` | 最大イテレーション数（デフォルト: 10） |
-| `--config` | | YAML設定ファイル |
+| `--config` | | YAML設定ファイル（詳細は [examples/README.md](examples/README.md) を参照） |
 | `--resume` | `-r` | タスクIDを指定して再開 |
 | `--verbose` | `-V` | 詳細な実行ログを表示（ツールコール・テキスト応答） |
 

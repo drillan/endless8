@@ -8,4 +8,4 @@ criteria:
   - "GET /api/users/{id} で特定ユーザーを取得できる"
   - "すべてのAPIテストがパスする"
 
-max_iterations: 15
+max_iterations: 10

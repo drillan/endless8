@@ -733,4 +733,86 @@ class TestKnowledgeContextSize:
             criteria=["条件"],
         )
         # Should have a configured default (not hardcoded 10 in engine)
+
+    async def test_in_memory_knowledge_fallback(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+    ) -> None:
+        """Test that engine uses in-memory knowledge when knowledge_base is not configured."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import Knowledge, KnowledgeType
+
+        # Create engine without knowledge_base
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+            max_iterations=1,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        # Manually add knowledge to in-memory storage
+        knowledge1 = Knowledge(
+            type=KnowledgeType.LESSON,
+            category="testing",
+            content="テスト知見1",
+            source_task="テスト",
+        )
+        knowledge2 = Knowledge(
+            type=KnowledgeType.DISCOVERY,
+            category="code",
+            content="テスト知見2",
+            source_task="テスト",
+        )
+        engine._knowledge.append(knowledge1)
+        engine._knowledge.append(knowledge2)
+
+        # Get knowledge context
+        context = await engine._get_knowledge_context()
+
+        # Should return formatted in-memory knowledge
+        assert "[lesson] テスト知見1" in context
+        assert "[discovery] テスト知見2" in context
+
+    async def test_empty_in_memory_knowledge_returns_none_message(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+    ) -> None:
+        """Test that empty in-memory knowledge returns 'ナレッジなし' message."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        # Create engine without knowledge_base
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+            max_iterations=1,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        # Get knowledge context with empty knowledge
+        context = await engine._get_knowledge_context()
+
+        # Should return "ナレッジなし"
+        assert context == "ナレッジなし"
         assert config.knowledge_context_size >= 1
