@@ -161,7 +161,7 @@ class ExecutionSummary(BaseModel):
 
 ### 5. Knowledge
 
-ナレッジエントリを表す。プロジェクト単位で永続化される。
+ナレッジエントリを表す。タスク単位で永続化される。
 
 ```python
 from datetime import datetime
@@ -302,7 +302,7 @@ class History:
 class KnowledgeBase:
     """ナレッジ管理クラス"""
 
-    def __init__(self, path: str = ".e8/knowledge.jsonl"):
+    def __init__(self, path: str):
         """
         Args:
             path: ナレッジファイルのパス
@@ -327,7 +327,7 @@ class KnowledgeBase:
         ...
 ```
 
-**Storage**: `.e8/knowledge.jsonl`
+**Storage**: `.e8/tasks/<task-id>/knowledge.jsonl`
 
 ---
 
@@ -367,7 +367,7 @@ class EngineConfig(BaseModel):
     criteria: list[str] = Field(..., min_length=1, description="完了条件")
     max_iterations: int = Field(default=10, ge=1, le=100, description="最大イテレーション数")
     persist: str | None = Field(None, description="履歴ファイルパス")
-    knowledge: str = Field(default=".e8/knowledge.jsonl", description="ナレッジファイルパス")
+    knowledge_context_size: int = Field(default=10, ge=1, le=50, description="ナレッジ参照件数")
     history_context_size: int = Field(default=5, ge=1, le=20, description="履歴参照件数")
     logging: LoggingOptions = Field(default_factory=LoggingOptions)
     claude_options: ClaudeOptions = Field(default_factory=ClaudeOptions)
@@ -418,7 +418,7 @@ class EngineConfig(BaseModel):
 | データ | ファイル | 形式 | スコープ |
 |--------|----------|------|----------|
 | 履歴 | `.e8/tasks/<task-id>/history.jsonl` | JSONL | タスク単位 |
-| ナレッジ | `.e8/knowledge.jsonl` | JSONL | プロジェクト単位 |
+| ナレッジ | `.e8/tasks/<task-id>/knowledge.jsonl` | JSONL | タスク単位 |
 | 生ログ | `.e8/tasks/<task-id>/logs/iteration-NNN.jsonl` | JSONL | イテレーション単位 |
 | 設定 | `task.yaml` | YAML | タスク単位 |
 
@@ -426,15 +426,16 @@ class EngineConfig(BaseModel):
 
 ```
 .e8/
-├── knowledge.jsonl              # プロジェクト単位のナレッジ
 └── tasks/
     ├── 2026-01-23T10-00-00/     # タスクID（タイムスタンプ形式）
     │   ├── history.jsonl        # タスクの履歴
+    │   ├── knowledge.jsonl      # タスクのナレッジ
     │   └── logs/                # オプション: 生ログ
     │       ├── iteration-001.jsonl
     │       └── iteration-002.jsonl
     └── 2026-01-23T13-30-00/     # 別のタスク
         ├── history.jsonl
+        ├── knowledge.jsonl
         └── logs/
 ```
 

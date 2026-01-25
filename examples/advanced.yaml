@@ -13,9 +13,6 @@ max_iterations: 20
 # 履歴の永続化（カスタムパスを指定する場合）
 persist: ".e8/auth-task/history.jsonl"
 
-# ナレッジファイルパス（カスタムパスを指定する場合）
-knowledge: ".e8/auth-task/knowledge.jsonl"
-
 # 履歴参照件数（コンテキスト効率化）
 history_context_size: 5
 

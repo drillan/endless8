@@ -51,9 +51,6 @@ class EngineConfig(BaseModel):
         default=10, ge=1, le=100, description="最大イテレーション数"
     )
     persist: str | None = Field(None, description="履歴ファイルパス")
-    knowledge: str = Field(
-        default=".e8/knowledge.jsonl", description="ナレッジファイルパス"
-    )
     history_context_size: int = Field(
         default=5, ge=1, le=20, description="履歴参照件数"
     )
