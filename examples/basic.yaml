@@ -1,9 +1,0 @@
-# 基本的な設定ファイル例
-# 使用方法: e8 run --config examples/basic.yaml
-
-task: "テストカバレッジを90%以上にする"
-criteria:
-  - "pytest --cov で90%以上"
-  - "すべてのテストがパスする"
-
-max_iterations: 10

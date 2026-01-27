@@ -2,8 +2,12 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from typer.testing import CliRunner
 
 from endless8.models import (
     ExecutionStatus,
@@ -94,3 +98,11 @@ def sample_knowledge() -> Knowledge:
         applied_count=0,
         created_at=datetime(2026, 1, 23, 10, 0, 0, tzinfo=UTC),
     )
+
+
+@pytest.fixture
+def runner() -> "CliRunner":
+    """Create CLI test runner."""
+    from typer.testing import CliRunner
+
+    return CliRunner()

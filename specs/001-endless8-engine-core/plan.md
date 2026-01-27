@@ -11,7 +11,7 @@ endless8 は pydantic-ai と claudecode-model を使用したコンテキスト�
 
 **Language/Version**: Python 3.13+
 **Primary Dependencies**: pydantic-ai, claudecode-model, DuckDB, typer (CLI), pyyaml
-**Storage**: JSONL形式ファイル（.e8/tasks/<task-id>/history.jsonl, .e8/knowledge.jsonl, .e8/tasks/<task-id>/logs/）
+**Storage**: JSONL形式ファイル（.e8/tasks/<task-id>/history.jsonl, .e8/tasks/<task-id>/knowledge.jsonl, .e8/tasks/<task-id>/logs/）
 **Testing**: pytest
 **Target Platform**: Linux/macOS/Windows (cross-platform CLI)
 **Project Type**: Single project

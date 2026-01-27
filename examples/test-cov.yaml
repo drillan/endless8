@@ -1,0 +1,19 @@
+# テストカバレッジ改善タスクの設定ファイル例
+# 使用方法: e8 run --config examples/test-cov.yaml
+
+task: "テストカバレッジを90%以上にする"
+criteria:
+  - "pytest --cov で90%以上"
+  - "すべてのテストがパスする"
+
+max_iterations: 10
+
+claude_options:
+  timeout: 600.0  # 10分（pytest実行に時間がかかる場合用）
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Read"
+    - "Write"

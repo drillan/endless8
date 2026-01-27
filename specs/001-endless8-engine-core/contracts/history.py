@@ -113,7 +113,7 @@ class KnowledgeBaseProtocol(Protocol):
     - 条件に基づくナレッジ検索
     - タスクに関連するナレッジの取得
 
-    Storage: .e8/knowledge.jsonl
+    Storage: .e8/tasks/<task-id>/knowledge.jsonl
     """
 
     def add_knowledge(self, knowledge: Knowledge) -> None:

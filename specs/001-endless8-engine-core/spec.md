@@ -146,7 +146,9 @@
 - **FR-031**: CLIは `e8 list` コマンドでタスク一覧を表示できなければならない
 - **FR-032**: システムは各イテレーション終了時に判定結果（JudgmentResult）を history.jsonl に `type: "judgment"` として即座に保存しなければならない
 - **FR-033**: システムはタスク終了時（completed, max_iterations, error, cancelled のいずれの場合も）に最終結果（LoopResult）を history.jsonl に `type: "final_result"` として保存しなければならない
-- **FR-035**: 実行エージェントはリサーチタスク等でテキスト成果物を生成した場合、`.e8/tasks/<task-id>/output.md`にファイルとして保存し、そのパスをartifactsに記録しなければならない。成果物は常にファイルとして永続化する
+- **FR-034**: CLIは `--verbose` オプションで、実行中のツールコールとテキスト応答をリアルタイム表示できなければならない
+  - ツールコール: `→ ツール名` 形式
+  - テキスト応答: `📝 テキスト...` 形式（先頭80文字）
 
 ### Key Entities
 
@@ -157,7 +159,7 @@
 - **Knowledge**: 永続的なナレッジエントリ。タイプ: discovery（発見）, lesson（教訓）, pattern（共通パターン）, constraint（制約）, codebase（構造知見）
 - **JudgmentResult**: 判定エージェントの出力。完了判定、各条件の評価、次のアクション提案を含む
 - **History**: 履歴を管理するクラス。サマリのリストを保持し、コンテキスト生成と永続化を担当
-- **KnowledgeBase**: ナレッジを管理するクラス。プロジェクト単位で永続化し、タスクをまたいで再利用
+- **KnowledgeBase**: ナレッジを管理するクラス。タスク単位で永続化
 - **LoopResult**: ループ全体の最終結果。成功/失敗、理由、履歴を含む
 
 ## Success Criteria *(mandatory)*
@@ -189,7 +191,7 @@
 | 層 | ファイル | スコープ | 内容 | 用途 |
 |----|---------|---------|------|------|
 | 履歴 | `.e8/tasks/<task-id>/history.jsonl` | タスク単位 | ExecutionSummary | 次イテレーションへのコンテキスト注入 |
-| ナレッジ | `.e8/knowledge.jsonl` | プロジェクト単位 | 発見、教訓、パターン | 各イテレーション開始時に参照、タスクをまたいで再利用 |
+| ナレッジ | `.e8/tasks/<task-id>/knowledge.jsonl` | タスク単位 | 発見、教訓、パターン | 各イテレーション開始時に参照 |
 | 生ログ | `.e8/tasks/<task-id>/logs/iteration-NNN.jsonl` | イテレーション単位 | stream-json全出力 | デバッグ・監査（オプション） |
 
 **タスク ID**: タイムスタンプ形式（例: `2026-01-23T13-30-00`）で生成。各タスク実行時に新しいディレクトリが作成される。
@@ -302,7 +304,7 @@ SELECT approach, reason FROM read_json_auto('.e8/history.jsonl')
 WHERE type = 'summary' AND result = 'failure'
 
 -- 高信頼度のパターンを取得
-SELECT content, example_file FROM read_json_auto('.e8/knowledge.jsonl')
+SELECT content, example_file FROM read_json_auto('.e8/tasks/<task-id>/knowledge.jsonl')
 WHERE type = 'pattern' AND confidence = 'high'
 
 -- 特定ファイルに関連する履歴を検索
@@ -357,7 +359,7 @@ criteria:
 # オプション
 max_iterations: 10
 persist: ".e8/history.jsonl"
-knowledge: ".e8/knowledge.jsonl"  # ナレッジベース（プロジェクト単位）
+knowledge_context_size: 10        # 参照するナレッジの件数（デフォルト: 10）
 history_context_size: 5           # 直近N件の履歴を参照（デフォルト: 5）
 
 # ログオプション（3層構造）
@@ -418,7 +420,7 @@ prompts:
 - Q: YAML設定ファイルでallowed_toolsを定義できるか？ → A: はい、claude_options.allowed_toolsで定義可能
 - Q: 実行ログの記録方式は？ → A: 2層構造（履歴: サマリのみ、生ログ: オプションでstream-json全出力を保存）
 - Q: 判定エージェントのプロンプトをカスタマイズできるか？ → A: はい、prompts.judgmentで定義可能
-- Q: ナレッジの永続化方式は？ → A: 3層構造（履歴: タスク単位、ナレッジ: プロジェクト単位で別ファイル、生ログ: オプション）
+- Q: ナレッジの永続化方式は？ → A: 3層構造（履歴: タスク単位、ナレッジ: タスク単位で別ファイル、生ログ: オプション）
 - Q: ナレッジのタイプは？ → A: discovery, lesson, pattern, constraint, codebase の5タイプ
 - Q: 履歴・ナレッジのクエリ方法は？ → A: DuckDBでJSONLを直接SQLクエリ
 - Q: メタデータの取得方法は？ → A: ハイブリッドアプローチ（機械的データはstream-json、セマンティックデータはappend_system_prompt）
@@ -445,11 +447,3 @@ prompts:
 - Q: history.jsonl に保存するレコードタイプは？ → A: ExecutionSummary + JudgmentResult + LoopResult（最終結果）の3種類
 - Q: JudgmentResult の保存タイミングは？ → A: 毎イテレーション終了時（判定完了後に即座に保存）
 - Q: LoopResult の保存条件は？ → A: すべての終了ケース（completed, max_iterations, error, cancelled）で保存
-
-### Session 2026-01-27
-
-- Q: サマリエージェントの要約方式は？ → A: LLM要約（pydantic-aiのAgentを使用し、SUMMARY_SYSTEM_PROMPTで指示）。機械的切詰（output[:200]）ではなく、判定に必要な情報を保持する知的要約を行う
-- Q: 判定エージェントの情報ソースは？ → A: ExecutionSummaryのみ。サマリエージェントが判定に十分な情報を含む要約を生成する責務を負い、判定エージェントはknowledge.jsonlや生ログを直接参照しない
-- Q: reasonフィールドの目標サイズは？ → A: 最大1000トークンで制御。文字数ではなくLLMのコンテキスト消費量で管理する
-- Q: リサーチタスクの成果物管理方式は？ → A: 実行エージェントがテキスト成果物を`.e8/tasks/<task-id>/output.md`にファイルとして保存し、artifactsにパスを記録する。成果物は常にファイルとして永続化する
-- Q: サマリエージェントに完了条件を渡すか？ → A: はい。完了条件（criteria）を入力として受け取り、各条件に関連する情報を優先的に要約に含める

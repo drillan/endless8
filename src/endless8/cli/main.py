@@ -6,9 +6,12 @@ Provides command-line interface for running tasks.
 import asyncio
 import logging
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
+
+if TYPE_CHECKING:
+    from claude_agent_sdk.types import Message
 
 from endless8 import __version__
 from endless8.agents.execution import ExecutionAgent
@@ -34,6 +37,35 @@ def version_callback(value: bool) -> None:
     if value:
         typer.echo(f"endless8 version {__version__}")
         raise typer.Exit()
+
+
+def _format_tool_call(tool_name: str, tool_input: dict[str, object]) -> str:
+    """Format a tool call for display.
+
+    Args:
+        tool_name: Name of the tool.
+        tool_input: Tool input parameters.
+
+    Returns:
+        Formatted string like "Write: path/to/file" or "Bash: command".
+    """
+    if tool_name in ("Read", "Write", "Edit"):
+        file_path = tool_input.get("file_path", "")
+        if file_path:
+            return f"{tool_name}: {file_path}"
+    elif tool_name == "Bash":
+        command = tool_input.get("command", "")
+        if command:
+            # Truncate long commands
+            if len(str(command)) > 40:
+                command = str(command)[:40] + "..."
+            return f"{tool_name}: {command}"
+    elif tool_name == "Glob" or tool_name == "Grep":
+        pattern = tool_input.get("pattern", "")
+        if pattern:
+            return f"{tool_name}: {pattern}"
+
+    return tool_name
 
 
 @app.callback()
@@ -72,6 +104,9 @@ def run(
     resume: Annotated[
         str | None, typer.Option("--resume", "-r", help="タスクIDを指定して再開")
     ] = None,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-V", help="詳細な実行ログを表示")
+    ] = False,
 ) -> None:
     """タスクを実行します。"""
     # Load config from file if provided
@@ -208,12 +243,67 @@ def run(
 
     async def run_engine() -> None:
         """Run the engine asynchronously."""
+        # Setup message callback for verbose mode
+        message_callback = None
+        if verbose:
+
+            def on_message(message: "Message") -> None:
+                try:
+                    from claude_agent_sdk.types import (
+                        AssistantMessage,
+                        StreamEvent,
+                        TextBlock,
+                        ToolUseBlock,
+                    )
+
+                    if isinstance(message, AssistantMessage):
+                        for block in message.content or []:
+                            if isinstance(block, ToolUseBlock):
+                                # Skip internal pydantic-ai tools (case-insensitive)
+                                if block.name.lower() == "structuredoutput":
+                                    continue
+                                # Format tool call with key input parameters
+                                tool_input = (
+                                    block.input if isinstance(block.input, dict) else {}
+                                )
+                                tool_display = _format_tool_call(block.name, tool_input)
+                                typer.echo(f"    → {tool_display}")
+                            elif isinstance(block, TextBlock):
+                                if block.text:
+                                    text = block.text[:80]
+                                    if len(block.text) > 80:
+                                        text += "..."
+                                    typer.echo(f"    📝 {text}")
+                    elif isinstance(message, StreamEvent):
+                        event = message.event
+                        if not isinstance(event, dict):
+                            return
+                        event_type = event.get("type", "")
+                        # Handle content_block_start for tool_use
+                        if event_type == "content_block_start":
+                            content_block = event.get("content_block", {})
+                            block_type = content_block.get("type", "")
+                            if block_type == "tool_use":
+                                tool_name = content_block.get("name", "")
+                                # Skip internal pydantic-ai tools (case-insensitive)
+                                if (
+                                    tool_name
+                                    and tool_name.lower() != "structuredoutput"
+                                ):
+                                    typer.echo(f"    → {tool_name}")
+                except Exception as e:
+                    # Log error but don't interrupt main execution
+                    logger.warning("Verbose callback error (ignored): %s", e)
+
+            message_callback = on_message
+
         engine = Engine(
             config=engine_config,
             intake_agent=IntakeAgent(timeout=engine_config.claude_options.timeout),
             execution_agent=ExecutionAgent(
                 allowed_tools=engine_config.claude_options.allowed_tools,
                 timeout=engine_config.claude_options.timeout,
+                message_callback=message_callback,
             ),
             summary_agent=SummaryAgent(task_description=task),
             judgment_agent=JudgmentAgent(timeout=engine_config.claude_options.timeout),
