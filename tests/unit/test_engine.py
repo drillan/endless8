@@ -1197,3 +1197,54 @@ class TestOutputMdSaving:
         output_path = tmp_path / "output.md"
         assert output_path.exists()
         assert output_path.read_text(encoding="utf-8") == "run_iter出力テキスト"
+
+
+class TestSaveOutputMd:
+    """Tests for _save_output_md error handling."""
+
+    def test_save_output_md_skips_when_no_history_store(self) -> None:
+        """Test that _save_output_md does nothing when history_store is None."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        config = EngineConfig(task="テスト", criteria=["条件"], max_iterations=3)
+        engine = Engine(config=config)
+
+        # Should not raise
+        engine._save_output_md("some output")
+
+    def test_save_output_md_writes_file(self, tmp_path: Path) -> None:
+        """Test that _save_output_md writes output to file."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.history import History
+
+        history_path = tmp_path / "history.jsonl"
+        history = History(history_path)
+
+        config = EngineConfig(task="テスト", criteria=["条件"], max_iterations=3)
+        engine = Engine(config=config, history=history)
+
+        engine._save_output_md("テスト出力")
+
+        output_path = tmp_path / "output.md"
+        assert output_path.exists()
+        assert output_path.read_text(encoding="utf-8") == "テスト出力"
+
+    def test_save_output_md_handles_os_error(self, tmp_path: Path) -> None:
+        """Test that _save_output_md handles OSError gracefully."""
+        from unittest.mock import patch as mock_patch
+
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.history import History
+
+        history_path = tmp_path / "history.jsonl"
+        history = History(history_path)
+
+        config = EngineConfig(task="テスト", criteria=["条件"], max_iterations=3)
+        engine = Engine(config=config, history=history)
+
+        with mock_patch.object(Path, "write_text", side_effect=OSError("disk full")):
+            # Should not raise, just log warning
+            engine._save_output_md("テスト出力")

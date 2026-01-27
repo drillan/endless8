@@ -24,7 +24,6 @@ class TestSummaryLLMOutputValidation:
         with pytest.raises(ValidationError):
             SummaryLLMOutput(
                 approach="テスト",
-                result="success",
                 reason="x" * 4001,
                 artifacts=[],
                 next_action=None,
@@ -35,7 +34,6 @@ class TestSummaryLLMOutputValidation:
         """Test that SummaryLLMOutput accepts reason with exactly 4000 characters."""
         output = SummaryLLMOutput(
             approach="テスト",
-            result="success",
             reason="x" * 4000,
             artifacts=[],
             next_action=None,
@@ -66,7 +64,6 @@ class TestSummaryAgent:
         """Create sample LLM output for mocking."""
         return SummaryLLMOutput(
             approach="TDD approach",
-            result="success",
             reason="テストを追加し、カバレッジが向上した。",
             artifacts=["tests/test_main.py"],
             next_action=None,
@@ -85,7 +82,6 @@ class TestSummaryAgent:
         """Create failure LLM output for mocking."""
         return SummaryLLMOutput(
             approach="タスク実行失敗",
-            result="failure",
             reason="テストが失敗しました。",
             artifacts=[],
             next_action="前回の失敗を分析して再試行",
@@ -353,7 +349,6 @@ class TestSummaryAgentTimeout:
         """Create sample LLM output."""
         return SummaryLLMOutput(
             approach="アプローチ",
-            result="success",
             reason="理由",
             artifacts=[],
             next_action=None,
@@ -366,16 +361,22 @@ class TestSummaryAgentTimeout:
         mock_result.output = llm_output
         return AsyncMock(return_value=mock_result)
 
-    async def test_timeout_propagated_to_agent_run(
+    async def test_timeout_propagated_to_create_agent_model(
         self,
         execution_result: ExecutionResult,
         llm_output: SummaryLLMOutput,
     ) -> None:
-        """Test that timeout is passed as model_settings to agent.run()."""
+        """Test that timeout is passed to create_agent_model()."""
         from endless8.agents.summary import SummaryAgent
 
         mock_run = self._mock_agent_run(llm_output)
-        with patch("endless8.agents.summary.Agent") as mock_agent_cls:
+        with (
+            patch("endless8.agents.summary.Agent") as mock_agent_cls,
+            patch(
+                "endless8.agents.summary.create_agent_model",
+                return_value="test-model",
+            ) as mock_create_model,
+        ):
             mock_agent_instance = MagicMock()
             mock_agent_instance.run = mock_run
             mock_agent_cls.return_value = mock_agent_instance
@@ -387,10 +388,13 @@ class TestSummaryAgentTimeout:
             )
             await agent.run(execution_result, iteration=1, criteria=["テスト条件"])
 
-            # Verify model_settings with timeout was passed
-            mock_run.assert_called_once()
-            call_args = mock_run.call_args
-            assert call_args.kwargs.get("model_settings") == {"timeout": 120.0}
+            # Verify create_agent_model was called with correct timeout
+            mock_create_model.assert_called_once_with(
+                "test-model",
+                max_turns=10,
+                allowed_tools=[],
+                timeout=120.0,
+            )
 
 
 class TestSummaryAgentLLM:
@@ -415,7 +419,6 @@ class TestSummaryAgentLLM:
         """Create sample LLM output."""
         return SummaryLLMOutput(
             approach="TDDアプローチでテストを追加",
-            result="success",
             reason="テストファイルを作成し、カバレッジが80%から92%に向上した。",
             artifacts=["tests/test_main.py"],
             next_action=None,
@@ -619,3 +622,196 @@ class TestSummaryAgentLLM:
 
             # Status should come from ExecutionResult, NOT from LLM
             assert summary.result == ExecutionStatus.FAILURE
+
+
+class TestBuildPrompt:
+    """Tests for _build_prompt function."""
+
+    def test_build_prompt_includes_iteration(self) -> None:
+        """Test that _build_prompt includes iteration number."""
+        from endless8.agents.summary import _build_prompt
+
+        result = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+        prompt = _build_prompt(result, iteration=3, criteria=["条件1"])
+        assert "イテレーション 3" in prompt
+
+    def test_build_prompt_includes_criteria(self) -> None:
+        """Test that _build_prompt includes all criteria."""
+        from endless8.agents.summary import _build_prompt
+
+        result = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=["file.py"],
+        )
+        prompt = _build_prompt(
+            result, iteration=1, criteria=["条件A", "条件B", "条件C"]
+        )
+        assert "条件A" in prompt
+        assert "条件B" in prompt
+        assert "条件C" in prompt
+
+    def test_build_prompt_includes_execution_output(self) -> None:
+        """Test that _build_prompt includes execution output."""
+        from endless8.agents.summary import _build_prompt
+
+        result = ExecutionResult(
+            status=ExecutionStatus.FAILURE,
+            output="エラーが発生しました",
+            artifacts=[],
+        )
+        prompt = _build_prompt(result, iteration=1, criteria=["条件"])
+        assert "エラーが発生しました" in prompt
+        assert "failure" in prompt
+
+    def test_build_prompt_includes_semantic_metadata(self) -> None:
+        """Test that _build_prompt includes semantic metadata when available."""
+        from endless8.agents.summary import _build_prompt
+
+        result = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+            semantic_metadata=SemanticMetadata(
+                approach="TDDアプローチ",
+                strategy_tags=["test-first"],
+                discoveries=["新発見"],
+            ),
+        )
+        prompt = _build_prompt(result, iteration=1, criteria=["条件"])
+        assert "TDDアプローチ" in prompt
+        assert "test-first" in prompt
+        assert "新発見" in prompt
+
+
+class TestSummaryAgentLLMFallback:
+    """Tests for SummaryAgent LLM failure fallback."""
+
+    async def test_llm_failure_returns_fallback_summary(self) -> None:
+        """Test that LLM failure returns a fallback summary with empty knowledge."""
+        from endless8.agents.summary import SummaryAgent
+
+        execution_result = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="実行結果のテキスト" * 100,
+            artifacts=["file1.py"],
+        )
+
+        with (
+            patch("endless8.agents.summary.Agent") as mock_agent_cls,
+            patch(
+                "endless8.agents.summary.create_agent_model",
+                return_value="test-model",
+            ),
+        ):
+            mock_agent_instance = MagicMock()
+            mock_agent_instance.run = AsyncMock(
+                side_effect=RuntimeError("LLM connection failed")
+            )
+            mock_agent_cls.return_value = mock_agent_instance
+
+            agent = SummaryAgent(task_description="テスト", model_name="test-model")
+            summary, knowledge_list = await agent.run(
+                execution_result, iteration=2, criteria=["条件"]
+            )
+
+            assert isinstance(summary, ExecutionSummary)
+            assert summary.iteration == 2
+            assert summary.approach == "LLM summarization failed"
+            assert summary.result == ExecutionStatus.SUCCESS
+            assert len(summary.reason) <= 500
+            assert knowledge_list == []
+
+    async def test_llm_failure_preserves_metadata(self) -> None:
+        """Test that LLM failure still preserves mechanical metadata."""
+        from endless8.agents.summary import SummaryAgent
+
+        execution_result = ExecutionResult(
+            status=ExecutionStatus.FAILURE,
+            output="テスト失敗",
+            artifacts=["src/main.py"],
+            semantic_metadata=SemanticMetadata(
+                approach="アプローチ",
+                strategy_tags=["tag1"],
+                discoveries=[],
+            ),
+        )
+
+        raw_log = '{"type":"tool_use","name":"Read","input":{"path":"src/main.py"}}\n{"usage":{"input_tokens":50,"output_tokens":25}}'
+
+        with (
+            patch("endless8.agents.summary.Agent") as mock_agent_cls,
+            patch(
+                "endless8.agents.summary.create_agent_model",
+                return_value="test-model",
+            ),
+        ):
+            mock_agent_instance = MagicMock()
+            mock_agent_instance.run = AsyncMock(side_effect=Exception("timeout"))
+            mock_agent_cls.return_value = mock_agent_instance
+
+            agent = SummaryAgent(task_description="テスト", model_name="test-model")
+            summary, knowledge_list = await agent.run(
+                execution_result,
+                iteration=1,
+                criteria=["条件"],
+                raw_log_content=raw_log,
+            )
+
+            # Metadata should still be extracted from raw log
+            assert "Read" in summary.metadata.tools_used
+            assert summary.metadata.tokens_used == 75
+            assert summary.metadata.strategy_tags == ["tag1"]
+            assert knowledge_list == []
+
+
+class TestKnowledgeEntryLiteralValidation:
+    """Tests for Literal type validation on KnowledgeEntry."""
+
+    def test_valid_knowledge_type(self) -> None:
+        """Test that valid knowledge types are accepted."""
+        for valid_type in ("discovery", "lesson", "pattern", "constraint", "codebase"):
+            entry = KnowledgeEntry(
+                type=valid_type,
+                category="test",
+                content="テスト内容",
+            )
+            assert entry.type == valid_type
+
+    def test_invalid_knowledge_type_rejected(self) -> None:
+        """Test that invalid knowledge type raises ValidationError."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            KnowledgeEntry(
+                type="invalid_type",
+                category="test",
+                content="テスト内容",
+            )
+
+    def test_valid_confidence_values(self) -> None:
+        """Test that valid confidence values are accepted."""
+        for valid_conf in ("high", "medium", "low"):
+            entry = KnowledgeEntry(
+                type="discovery",
+                category="test",
+                content="テスト内容",
+                confidence=valid_conf,
+            )
+            assert entry.confidence == valid_conf
+
+    def test_invalid_confidence_rejected(self) -> None:
+        """Test that invalid confidence value raises ValidationError."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            KnowledgeEntry(
+                type="discovery",
+                category="test",
+                content="テスト内容",
+                confidence="very_high",
+            )

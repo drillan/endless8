@@ -1,5 +1,7 @@
 """Summary models for endless8."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from endless8.models.results import ExecutionStatus
@@ -8,22 +10,23 @@ from endless8.models.results import ExecutionStatus
 class KnowledgeEntry(BaseModel):
     """LLMが抽出するナレッジエントリ。"""
 
-    type: str = Field(
+    type: Literal["discovery", "lesson", "pattern", "constraint", "codebase"] = Field(
         ...,
         description="ナレッジタイプ: discovery | lesson | pattern | constraint | codebase",
     )
     category: str = Field(..., description="カテゴリ（例: error_handling, testing）")
     content: str = Field(..., description="ナレッジの内容")
-    confidence: str = Field(default="medium", description="信頼度: high | medium | low")
+    confidence: Literal["high", "medium", "low"] = Field(
+        default="medium", description="信頼度: high | medium | low"
+    )
 
 
 class SummaryLLMOutput(BaseModel):
     """LLMによるサマリ出力の構造化モデル。"""
 
     approach: str = Field(..., description="採用したアプローチ（1行）")
-    result: str = Field(..., description="結果: success | failure | error")
     reason: str = Field(
-        ..., max_length=4000, description="結果の理由（最大1000トークン）"
+        ..., max_length=4000, description="結果の理由（簡潔に、最大4000文字）"
     )
     artifacts: list[str] = Field(
         default_factory=list, description="生成・変更したファイルのリスト"

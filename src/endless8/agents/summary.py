@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 
 from pydantic_ai import Agent
 
+from endless8.agents.model_factory import create_agent_model
 from endless8.models import (
     ExecutionResult,
     ExecutionSummary,
@@ -35,13 +36,12 @@ SUMMARY_SYSTEM_PROMPT = """あなたはサマリエージェントです。
 
 ## 重要な制約
 - reason フィールドは **最大1000トークン** に収めてください。簡潔かつ情報量の多い要約を心がけてください。
-- result フィールドは実行結果のステータスをそのまま反映してください。
+- 注意: result はシステムが自動設定するため、出力に含める必要はありません。
 
 ## 出力形式
 構造化された JSON で以下のフィールドを返してください：
 
 - approach: 採用したアプローチ（1行）
-- result: "success" | "failure" | "error"
 - reason: 結果の理由（最大1000トークン。完了条件に対する進捗を含めること）
 - artifacts: 生成・変更したファイルのリスト
 - next_action: 次のアクション情報（未完了の場合、null可）
@@ -261,13 +261,34 @@ class SummaryAgent:
         # 2. LLM summarization
         prompt = _build_prompt(execution_result, iteration, criteria)
 
-        agent = Agent(
-            model=self._model_name,
-            system_prompt=SUMMARY_SYSTEM_PROMPT,
-            output_type=SummaryLLMOutput,
+        model = create_agent_model(
+            self._model_name,
+            max_turns=10,
+            allowed_tools=[],
+            timeout=self._timeout,
         )
-        llm_result = await agent.run(prompt, model_settings={"timeout": self._timeout})
-        llm_output: SummaryLLMOutput = llm_result.output
+        agent: Agent[None, SummaryLLMOutput] = Agent(
+            model,
+            output_type=SummaryLLMOutput,
+            system_prompt=SUMMARY_SYSTEM_PROMPT,
+        )
+
+        try:
+            llm_result = await agent.run(prompt)
+            llm_output: SummaryLLMOutput = llm_result.output
+        except Exception:
+            logger.exception("LLM summarization failed, using fallback summary")
+            summary = ExecutionSummary(
+                iteration=iteration,
+                approach="LLM summarization failed",
+                result=execution_result.status,
+                reason=execution_result.output[:500],
+                artifacts=execution_result.artifacts,
+                metadata=metadata,
+                next=None,
+                timestamp=datetime.now(UTC).isoformat(),
+            )
+            return summary, []
 
         # 3. Build next action from LLM output
         next_action: NextAction | None = None
@@ -301,12 +322,8 @@ class SummaryAgent:
         # 5. Convert LLM knowledge entries to Knowledge objects
         knowledge_list: list[Knowledge] = []
         for entry in llm_output.knowledge_entries:
-            knowledge_type = _KNOWLEDGE_TYPE_MAP.get(
-                entry.type, KnowledgeType.DISCOVERY
-            )
-            confidence = _CONFIDENCE_MAP.get(
-                entry.confidence, KnowledgeConfidence.MEDIUM
-            )
+            knowledge_type = _KNOWLEDGE_TYPE_MAP[entry.type]
+            confidence = _CONFIDENCE_MAP[entry.confidence]
             knowledge = Knowledge(
                 type=knowledge_type,
                 category=entry.category,

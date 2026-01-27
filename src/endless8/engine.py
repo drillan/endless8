@@ -132,6 +132,16 @@ class Engine:
         """Current iteration number (0 = not started)."""
         return self._current_iteration
 
+    def _save_output_md(self, output: str) -> None:
+        """Save execution output to output.md."""
+        if not self._history_store:
+            return
+        try:
+            output_path = self._history_store.path.parent / "output.md"
+            output_path.write_text(output, encoding="utf-8")
+        except OSError:
+            logger.warning("Failed to write output.md", exc_info=True)
+
     async def _get_history_context(self) -> str:
         """Get formatted history context for execution agent.
 
@@ -378,12 +388,7 @@ class Engine:
                         data={"status": execution_result.status.value},
                     )
 
-                    # Save execution output to output.md
-                    if self._history_store:
-                        output_path = self._history_store.path.parent / "output.md"
-                        output_path.write_text(
-                            execution_result.output, encoding="utf-8"
-                        )
+                    self._save_output_md(execution_result.output)
                 else:
                     raise RuntimeError("Execution agent not configured")
 
@@ -552,12 +557,7 @@ class Engine:
                 if self._execution_agent:
                     execution_result = await self._execution_agent.run(context)
 
-                    # Save execution output to output.md
-                    if self._history_store:
-                        output_path = self._history_store.path.parent / "output.md"
-                        output_path.write_text(
-                            execution_result.output, encoding="utf-8"
-                        )
+                    self._save_output_md(execution_result.output)
                 else:
                     raise RuntimeError("Execution agent not configured")
 
