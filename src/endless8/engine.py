@@ -57,6 +57,7 @@ class SummaryAgentProtocol(Protocol):
         self,
         execution_result: ExecutionResult,
         iteration: int,
+        criteria: list[str],
         raw_log_content: str | None = None,
     ) -> tuple[ExecutionSummary, list[Knowledge]]: ...
 
@@ -130,6 +131,16 @@ class Engine:
     def current_iteration(self) -> int:
         """Current iteration number (0 = not started)."""
         return self._current_iteration
+
+    def _save_output_md(self, output: str) -> None:
+        """Save execution output to output.md."""
+        if not self._history_store:
+            return
+        try:
+            output_path = self._history_store.path.parent / "output.md"
+            output_path.write_text(output, encoding="utf-8")
+        except OSError:
+            logger.warning("Failed to write output.md", exc_info=True)
 
     async def _get_history_context(self) -> str:
         """Get formatted history context for execution agent.
@@ -376,13 +387,15 @@ class Engine:
                         iteration=iteration,
                         data={"status": execution_result.status.value},
                     )
+
+                    self._save_output_md(execution_result.output)
                 else:
                     raise RuntimeError("Execution agent not configured")
 
                 # Summarize
                 if self._summary_agent:
                     summary, knowledge_list = await self._summary_agent.run(
-                        execution_result, iteration
+                        execution_result, iteration, task_input.criteria
                     )
                     self._history.append(summary)
                     self._knowledge.extend(knowledge_list)
@@ -543,13 +556,15 @@ class Engine:
                 # Execute
                 if self._execution_agent:
                     execution_result = await self._execution_agent.run(context)
+
+                    self._save_output_md(execution_result.output)
                 else:
                     raise RuntimeError("Execution agent not configured")
 
                 # Summarize
                 if self._summary_agent:
                     summary, knowledge_list = await self._summary_agent.run(
-                        execution_result, iteration
+                        execution_result, iteration, task_input.criteria
                     )
                     self._history.append(summary)
                     self._knowledge.extend(knowledge_list)

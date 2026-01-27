@@ -305,7 +305,11 @@ def run(
                 timeout=engine_config.claude_options.timeout,
                 message_callback=message_callback,
             ),
-            summary_agent=SummaryAgent(task_description=task),
+            summary_agent=SummaryAgent(
+                task_description=task,
+                model_name=engine_config.agent_model,
+                timeout=engine_config.claude_options.timeout,
+            ),
             judgment_agent=JudgmentAgent(timeout=engine_config.claude_options.timeout),
             history=history_store,
             knowledge_base=knowledge_base,
