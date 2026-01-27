@@ -113,6 +113,7 @@ class Engine:
         self._history: list[ExecutionSummary] = []
         self._knowledge: list[Knowledge] = []
         self._start_iteration = 1  # For resume support
+        self._previous_output: str | None = None
 
     async def _initialize_from_history(self) -> None:
         """Initialize iteration counter from history for resume support."""
@@ -121,6 +122,12 @@ class Engine:
             if last_iter > 0:
                 self._start_iteration = last_iter + 1
                 logger.info("Resuming from iteration %d", self._start_iteration)
+
+            # Restore previous output from output.md for raw_output_context
+            if self._config.raw_output_context >= 1:
+                output_path = self._history_store.path.parent / "output.md"
+                if output_path.exists():
+                    self._previous_output = output_path.read_text(encoding="utf-8")
 
     @property
     def is_running(self) -> bool:
@@ -375,6 +382,9 @@ class Engine:
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
+                    raw_output_context=self._previous_output
+                    if self._config.raw_output_context >= 1
+                    else None,
                 )
 
                 # Execute
@@ -389,6 +399,10 @@ class Engine:
                     )
 
                     self._save_output_md(execution_result.output)
+
+                    # Update previous output for next iteration
+                    if self._config.raw_output_context >= 1:
+                        self._previous_output = execution_result.output
                 else:
                     raise RuntimeError("Execution agent not configured")
 
@@ -551,6 +565,9 @@ class Engine:
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
+                    raw_output_context=self._previous_output
+                    if self._config.raw_output_context >= 1
+                    else None,
                 )
 
                 # Execute
@@ -558,6 +575,10 @@ class Engine:
                     execution_result = await self._execution_agent.run(context)
 
                     self._save_output_md(execution_result.output)
+
+                    # Update previous output for next iteration
+                    if self._config.raw_output_context >= 1:
+                        self._previous_output = execution_result.output
                 else:
                     raise RuntimeError("Execution agent not configured")
 

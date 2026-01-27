@@ -28,6 +28,9 @@ class ExecutionContext(BaseModel):
     iteration: int = Field(..., ge=1, description="イテレーション番号")
     history_context: str = Field(..., description="サマリ化された履歴")
     knowledge_context: str = Field(..., description="関連するナレッジ")
+    raw_output_context: str | None = Field(
+        None, description="前回イテレーションの生出力"
+    )
 
 
 class JudgmentContext(BaseModel):

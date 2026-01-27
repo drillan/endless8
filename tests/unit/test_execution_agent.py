@@ -261,3 +261,43 @@ class TestExecutionAgent:
             mock_create_model.assert_called_once()
             call_kwargs = mock_create_model.call_args
             assert call_kwargs.kwargs.get("message_callback") is None
+
+
+class TestRawOutputContextPrompt:
+    """Tests for raw_output_context in prompt generation."""
+
+    async def test_prompt_includes_raw_output_when_provided(self) -> None:
+        """Test that prompt includes raw output section when provided."""
+        from endless8.agents.execution import ExecutionAgent
+
+        context = ExecutionContext(
+            task="テスト",
+            criteria=["条件"],
+            iteration=2,
+            history_context="履歴",
+            knowledge_context="ナレッジ",
+            raw_output_context="前回の出力テキスト",
+        )
+
+        agent = ExecutionAgent()
+        prompt = agent._build_prompt(context)
+
+        assert "前回の生出力" in prompt
+        assert "前回の出力テキスト" in prompt
+
+    async def test_prompt_excludes_raw_output_when_none(self) -> None:
+        """Test that prompt does not include raw output section when None."""
+        from endless8.agents.execution import ExecutionAgent
+
+        context = ExecutionContext(
+            task="テスト",
+            criteria=["条件"],
+            iteration=1,
+            history_context="履歴",
+            knowledge_context="ナレッジ",
+        )
+
+        agent = ExecutionAgent()
+        prompt = agent._build_prompt(context)
+
+        assert "前回の生出力" not in prompt
