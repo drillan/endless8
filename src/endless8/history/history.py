@@ -39,6 +39,11 @@ class History:
         self._summaries: list[ExecutionSummary] = []
         self._load_existing()
 
+    @property
+    def path(self) -> Path:
+        """Path to the history JSONL file."""
+        return self._path
+
     def _load_existing(self) -> None:
         """Load existing summaries from file."""
         if not self._path.exists():

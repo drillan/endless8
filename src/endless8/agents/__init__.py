@@ -96,6 +96,7 @@ class SummaryAgentProtocol(Protocol):
         self,
         execution_result: ExecutionResult,
         iteration: int,
+        criteria: list[str],
         raw_log_content: str | None = None,
     ) -> tuple[ExecutionSummary, list[Knowledge]]:
         """実行結果をサマリ化し、ナレッジを抽出する。
@@ -103,6 +104,7 @@ class SummaryAgentProtocol(Protocol):
         Args:
             execution_result: 実行エージェントの出力
             iteration: イテレーション番号
+            criteria: 完了条件のリスト
             raw_log_content: stream-json の生ログ（オプション）
 
         Returns:

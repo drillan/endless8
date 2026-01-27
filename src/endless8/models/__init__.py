@@ -13,7 +13,13 @@ from endless8.models.results import (
     LoopStatus,
     SemanticMetadata,
 )
-from endless8.models.summary import ExecutionSummary, NextAction, SummaryMetadata
+from endless8.models.summary import (
+    ExecutionSummary,
+    KnowledgeEntry,
+    NextAction,
+    SummaryLLMOutput,
+    SummaryMetadata,
+)
 from endless8.models.task import TaskInput
 
 __all__ = [
@@ -30,6 +36,8 @@ __all__ = [
     "LoopStatus",
     "LoopResult",
     # Summary
+    "KnowledgeEntry",
+    "SummaryLLMOutput",
     "SummaryMetadata",
     "NextAction",
     "ExecutionSummary",

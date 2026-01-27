@@ -1,5 +1,6 @@
 """Unit tests for the Engine class."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +13,7 @@ from endless8.models import (
     IntakeResult,
     IntakeStatus,
     JudgmentResult,
+    Knowledge,
     LoopStatus,
     SummaryMetadata,
     TaskInput,
@@ -816,3 +818,382 @@ class TestKnowledgeContextSize:
 
         # Should return "ナレッジなし"
         assert context == "ナレッジなし"
+
+
+class TestEngineSummaryCriteria:
+    """Tests for Engine passing criteria to SummaryAgent."""
+
+    async def test_engine_passes_criteria_to_summary_agent(self) -> None:
+        """Test that Engine passes criteria to summary_agent.run()."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件1", "条件2"],
+        )
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+
+        mock_summary_agent = AsyncMock()
+        mock_summary_agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-27T10:00:00Z",
+            ),
+            [],
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件1",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件1", "条件2"],
+            max_iterations=3,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=["条件1", "条件2"],
+            max_iterations=3,
+        )
+        await engine.run(task_input)
+
+        # Verify summary_agent.run was called with criteria
+        mock_summary_agent.run.assert_called_once()
+        call_kwargs = mock_summary_agent.run.call_args
+        # criteria should be passed as a keyword argument or positional
+        args, kwargs = call_kwargs
+        # Check criteria is in the call (positional arg 3 or keyword)
+        if "criteria" in kwargs:
+            assert kwargs["criteria"] == ["条件1", "条件2"]
+        else:
+            # positional: execution_result, iteration, criteria
+            assert args[2] == ["条件1", "条件2"]
+
+
+class TestOutputMdSaving:
+    """Tests for output.md saving in engine."""
+
+    async def test_output_md_saved_after_run(self, tmp_path: Path) -> None:
+        """Test that output.md is saved after engine run."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.history import History
+
+        history_path = tmp_path / "history.jsonl"
+        history = History(history_path)
+
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="実行結果の出力テキスト",
+            artifacts=[],
+        )
+
+        mock_summary_agent = AsyncMock()
+        mock_summary_agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-27T10:00:00Z",
+            ),
+            [],
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+        config = EngineConfig(task="テスト", criteria=["条件"], max_iterations=3)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+            history=history,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=3)
+        await engine.run(task_input)
+
+        output_path = tmp_path / "output.md"
+        assert output_path.exists()
+        assert output_path.read_text(encoding="utf-8") == "実行結果の出力テキスト"
+
+    async def test_output_md_overwritten_each_iteration(self, tmp_path: Path) -> None:
+        """Test that output.md is overwritten each iteration with latest output."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.history import History
+
+        history_path = tmp_path / "history.jsonl"
+        history = History(history_path)
+
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+
+        # Return different outputs for each iteration
+        call_count = 0
+
+        async def execution_side_effect(_ctx: object) -> ExecutionResult:
+            nonlocal call_count
+            call_count += 1
+            return ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                output=f"出力イテレーション{call_count}",
+                artifacts=[],
+            )
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.side_effect = execution_side_effect
+
+        def summary_side_effect(
+            _result: ExecutionResult,
+            iteration: int,
+            _criteria: list[str],
+        ) -> tuple[ExecutionSummary, list[Knowledge]]:
+            return (
+                ExecutionSummary(
+                    iteration=iteration,
+                    approach=f"アプローチ{iteration}",
+                    result=ExecutionStatus.SUCCESS,
+                    reason=f"理由{iteration}",
+                    artifacts=[],
+                    metadata=SummaryMetadata(),
+                    timestamp="2026-01-27T10:00:00Z",
+                ),
+                [],
+            )
+
+        mock_summary_agent = AsyncMock()
+        mock_summary_agent.run.side_effect = summary_side_effect
+
+        # Complete on second iteration
+        judgment_count = 0
+
+        def judgment_side_effect(_ctx: object) -> JudgmentResult:
+            nonlocal judgment_count
+            judgment_count += 1
+            return JudgmentResult(
+                is_complete=(judgment_count >= 2),
+                evaluations=[
+                    CriteriaEvaluation(
+                        criterion="条件",
+                        is_met=(judgment_count >= 2),
+                        evidence="達成" if judgment_count >= 2 else "未達成",
+                        confidence=1.0,
+                    )
+                ],
+                overall_reason="完了" if judgment_count >= 2 else "未完了",
+            )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.side_effect = judgment_side_effect
+
+        config = EngineConfig(task="テスト", criteria=["条件"], max_iterations=5)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+            history=history,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=5)
+        await engine.run(task_input)
+
+        output_path = tmp_path / "output.md"
+        assert output_path.exists()
+        # Should contain the last iteration's output
+        assert output_path.read_text(encoding="utf-8") == "出力イテレーション2"
+
+    async def test_no_error_when_history_store_is_none(self) -> None:
+        """Test that no error occurs when history_store is None."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="出力",
+            artifacts=[],
+        )
+
+        mock_summary_agent = AsyncMock()
+        mock_summary_agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-27T10:00:00Z",
+            ),
+            [],
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+        config = EngineConfig(task="テスト", criteria=["条件"], max_iterations=3)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+            # No history store
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=3)
+        result = await engine.run(task_input)
+        # Should complete without error
+        assert result.status == LoopStatus.COMPLETED
+
+    async def test_output_md_saved_in_run_iter(self, tmp_path: Path) -> None:
+        """Test that output.md is saved when using run_iter."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.history import History
+
+        history_path = tmp_path / "history.jsonl"
+        history = History(history_path)
+
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="run_iter出力テキスト",
+            artifacts=[],
+        )
+
+        mock_summary_agent = AsyncMock()
+        mock_summary_agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-27T10:00:00Z",
+            ),
+            [],
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+        config = EngineConfig(task="テスト", criteria=["条件"], max_iterations=3)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+            history=history,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=3)
+        async for _ in engine.run_iter(task_input):
+            pass
+
+        output_path = tmp_path / "output.md"
+        assert output_path.exists()
+        assert output_path.read_text(encoding="utf-8") == "run_iter出力テキスト"

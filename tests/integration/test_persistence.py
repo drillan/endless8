@@ -409,7 +409,9 @@ class TestJudgmentAndFinalResultPersistence:
         agent = AsyncMock()
 
         def create_summary(
-            _result: ExecutionResult, iteration: int
+            _result: ExecutionResult,
+            iteration: int,
+            _criteria: list[str],
         ) -> tuple[ExecutionSummary, list[Knowledge]]:
             summary = _make_summary(
                 iteration=iteration,
@@ -733,3 +735,90 @@ class TestJudgmentAndFinalResultPersistence:
         content = history_path.read_text()
         assert '"type": "final_result"' in content
         assert '"status": "cancelled"' in content
+
+
+class TestOutputMdPersistence:
+    """Tests for output.md file persistence."""
+
+    @pytest.fixture
+    def temp_task_dir(self, tmp_path: Path) -> Path:
+        """Create temporary task directory."""
+        task_dir = tmp_path / ".e8" / "tasks" / "output-md-test"
+        task_dir.mkdir(parents=True)
+        return task_dir
+
+    @pytest.mark.asyncio
+    async def test_output_md_written_to_task_dir(self, temp_task_dir: Path) -> None:
+        """Test that output.md is written under the task directory."""
+        history_path = temp_task_dir / "history.jsonl"
+        knowledge_path = temp_task_dir / "knowledge.jsonl"
+
+        history = History(history_path)
+        kb = KnowledgeBase(knowledge_path)
+
+        mock_intake_agent = AsyncMock()
+        mock_intake_agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="output.mdテスト",
+            criteria=["条件1"],
+        )
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="統合テスト実行結果",
+            artifacts=["test.py"],
+        )
+
+        summary = _make_summary(
+            iteration=1,
+            approach="テストアプローチ",
+            result=ExecutionStatus.SUCCESS,
+            reason="成功",
+            artifacts=["test.py"],
+        )
+        mock_summary_agent = AsyncMock()
+        mock_summary_agent.run.return_value = (summary, [])
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件1",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="タスク完了",
+        )
+
+        config = EngineConfig(
+            task="output.mdテスト",
+            criteria=["条件1"],
+            max_iterations=5,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+            history=history,
+            knowledge_base=kb,
+        )
+
+        task_input = TaskInput(
+            task="output.mdテスト",
+            criteria=["条件1"],
+            max_iterations=5,
+        )
+
+        await engine.run(task_input)
+
+        # output.md should be written in the same directory as history.jsonl
+        output_path = temp_task_dir / "output.md"
+        assert output_path.exists()
+        assert output_path.read_text(encoding="utf-8") == "統合テスト実行結果"

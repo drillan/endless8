@@ -1,15 +1,17 @@
 """Summary Agent implementation for endless8.
 
 The Summary Agent is responsible for:
-- Compressing execution results into summaries
-- Extracting metadata from stream-json logs
+- Compressing execution results into summaries via LLM
+- Extracting metadata from stream-json logs (mechanical)
 - Integrating semantic metadata
-- Extracting knowledge from executions
+- Extracting knowledge from executions via LLM
 """
 
 import json
 import logging
 from datetime import UTC, datetime
+
+from pydantic_ai import Agent
 
 from endless8.models import (
     ExecutionResult,
@@ -20,32 +22,51 @@ from endless8.models import (
     NextAction,
     SummaryMetadata,
 )
+from endless8.models.summary import SummaryLLMOutput
 
 logger = logging.getLogger(__name__)
 
 SUMMARY_SYSTEM_PROMPT = """あなたはサマリエージェントです。
 
-実行エージェントの結果を分析し、以下を行ってください：
-1. 実行結果を簡潔にサマリ化
+実行エージェントの結果を、完了条件に照らして分析し、以下を行ってください：
+1. 実行結果を完了条件の観点から簡潔にサマリ化
 2. 次のイテレーションに役立つ情報を抽出
 3. プロジェクトに永続化すべきナレッジを特定
 
-## 出力形式
-サマリとナレッジを以下の形式で報告してください：
+## 重要な制約
+- reason フィールドは **最大1000トークン** に収めてください。簡潔かつ情報量の多い要約を心がけてください。
+- result フィールドは実行結果のステータスをそのまま反映してください。
 
-### サマリ
+## 出力形式
+構造化された JSON で以下のフィールドを返してください：
+
 - approach: 採用したアプローチ（1行）
 - result: "success" | "failure" | "error"
-- reason: 結果の理由（1-2文）
+- reason: 結果の理由（最大1000トークン。完了条件に対する進捗を含めること）
 - artifacts: 生成・変更したファイルのリスト
-- next: 次のアクション情報（未完了の場合）
-
-### ナレッジ（該当する場合のみ）
-- type: "discovery" | "lesson" | "pattern" | "constraint" | "codebase"
-- category: カテゴリ（例: error_handling, testing）
-- content: ナレッジの内容
-- confidence: "high" | "medium" | "low"
+- next_action: 次のアクション情報（未完了の場合、null可）
+- knowledge_entries: 抽出されたナレッジのリスト（該当する場合のみ）
+  - type: "discovery" | "lesson" | "pattern" | "constraint" | "codebase"
+  - category: カテゴリ（例: error_handling, testing）
+  - content: ナレッジの内容
+  - confidence: "high" | "medium" | "low"
 """
+
+# Mapping from LLM string confidence to KnowledgeConfidence enum
+_CONFIDENCE_MAP: dict[str, KnowledgeConfidence] = {
+    "high": KnowledgeConfidence.HIGH,
+    "medium": KnowledgeConfidence.MEDIUM,
+    "low": KnowledgeConfidence.LOW,
+}
+
+# Mapping from LLM string type to KnowledgeType enum
+_KNOWLEDGE_TYPE_MAP: dict[str, KnowledgeType] = {
+    "discovery": KnowledgeType.DISCOVERY,
+    "lesson": KnowledgeType.LESSON,
+    "pattern": KnowledgeType.PATTERN,
+    "constraint": KnowledgeType.CONSTRAINT,
+    "codebase": KnowledgeType.CODEBASE,
+}
 
 
 def _parse_tools_from_log(raw_log: str) -> list[str]:
@@ -141,34 +162,89 @@ def _parse_tokens_from_log(raw_log: str) -> int:
     return total_tokens
 
 
-class SummaryAgent:
-    """Summary Agent for compressing execution results."""
+def _build_prompt(
+    execution_result: ExecutionResult,
+    iteration: int,
+    criteria: list[str],
+) -> str:
+    """Build LLM prompt from execution result and criteria.
 
-    def __init__(self, task_description: str = "") -> None:
+    Args:
+        execution_result: Result from execution agent.
+        iteration: Current iteration number.
+        criteria: Completion criteria list.
+
+    Returns:
+        Formatted prompt string for the LLM.
+    """
+    criteria_text = "\n".join(f"- {c}" for c in criteria)
+
+    sections = [
+        f"## イテレーション {iteration}",
+        "",
+        "## 完了条件",
+        criteria_text,
+        "",
+        "## 実行結果",
+        f"- ステータス: {execution_result.status.value}",
+        f"- 出力: {execution_result.output}",
+        f"- 成果物: {', '.join(execution_result.artifacts) if execution_result.artifacts else 'なし'}",
+    ]
+
+    if execution_result.semantic_metadata:
+        sm = execution_result.semantic_metadata
+        sections.extend(
+            [
+                "",
+                "## セマンティックメタデータ",
+                f"- アプローチ: {sm.approach}",
+                f"- 戦略タグ: {', '.join(sm.strategy_tags)}",
+                f"- 発見: {', '.join(sm.discoveries) if sm.discoveries else 'なし'}",
+            ]
+        )
+
+    return "\n".join(sections)
+
+
+class SummaryAgent:
+    """Summary Agent for compressing execution results via LLM."""
+
+    def __init__(
+        self,
+        task_description: str = "",
+        model_name: str = "anthropic:claude-sonnet-4-5",
+        timeout: float = 300.0,
+    ) -> None:
         """Initialize the summary agent.
 
         Args:
             task_description: Description of the current task for knowledge extraction.
+            model_name: Model name for the pydantic-ai Agent.
+            timeout: Timeout for LLM calls in seconds.
         """
         self._task_description = task_description
+        self._model_name = model_name
+        self._timeout = timeout
 
     async def run(
         self,
         execution_result: ExecutionResult,
         iteration: int,
+        criteria: list[str],
         raw_log_content: str | None = None,
     ) -> tuple[ExecutionSummary, list[Knowledge]]:
-        """Summarize execution result and extract knowledge.
+        """Summarize execution result and extract knowledge via LLM.
 
         Args:
             execution_result: Result from execution agent.
             iteration: Current iteration number.
+            criteria: Completion criteria list.
             raw_log_content: Optional raw stream-json log.
 
         Returns:
             Tuple of (ExecutionSummary, list of extracted Knowledge).
         """
-        # Build metadata from execution result and raw log
+        # 1. Mechanical metadata extraction (preserved from original)
         metadata = SummaryMetadata()
 
         if raw_log_content:
@@ -176,30 +252,33 @@ class SummaryAgent:
             metadata.files_modified = _parse_files_from_log(raw_log_content)
             metadata.tokens_used = _parse_tokens_from_log(raw_log_content)
 
-        # Merge with semantic metadata if available
         if execution_result.semantic_metadata:
             metadata.strategy_tags = execution_result.semantic_metadata.strategy_tags
 
-        # If we don't have files from log, use artifacts
         if not metadata.files_modified and execution_result.artifacts:
             metadata.files_modified = execution_result.artifacts
 
-        # Build approach from semantic metadata or generate
-        approach = ""
-        if execution_result.semantic_metadata:
-            approach = execution_result.semantic_metadata.approach
-        else:
-            # Generate a simple approach based on status
-            if execution_result.status.value == "success":
-                approach = "タスク実行完了"
-            elif execution_result.status.value == "failure":
-                approach = "タスク実行失敗"
-            else:
-                approach = "タスク実行エラー"
+        # 2. LLM summarization
+        prompt = _build_prompt(execution_result, iteration, criteria)
 
-        # Build next action for non-complete results
+        agent = Agent(
+            model=self._model_name,
+            system_prompt=SUMMARY_SYSTEM_PROMPT,
+            output_type=SummaryLLMOutput,
+        )
+        llm_result = await agent.run(prompt, model_settings={"timeout": self._timeout})
+        llm_output: SummaryLLMOutput = llm_result.output
+
+        # 3. Build next action from LLM output
         next_action: NextAction | None = None
-        if execution_result.status.value != "success":
+        if llm_output.next_action:
+            next_action = NextAction(
+                suggested_action=llm_output.next_action,
+                blockers=[],
+                partial_progress=None,
+                pending_items=[],
+            )
+        elif execution_result.status.value != "success":
             next_action = NextAction(
                 suggested_action="前回の失敗を分析して再試行",
                 blockers=[],
@@ -207,41 +286,35 @@ class SummaryAgent:
                 pending_items=[],
             )
 
-        # Create summary
+        # 4. Build summary — status from ExecutionResult, not LLM
         summary = ExecutionSummary(
             iteration=iteration,
-            approach=approach,
+            approach=llm_output.approach,
             result=execution_result.status,
-            reason=execution_result.output[:200] if execution_result.output else "",
+            reason=llm_output.reason,
             artifacts=execution_result.artifacts,
             metadata=metadata,
             next=next_action,
             timestamp=datetime.now(UTC).isoformat(),
         )
 
-        # Extract knowledge from discoveries
+        # 5. Convert LLM knowledge entries to Knowledge objects
         knowledge_list: list[Knowledge] = []
-        if execution_result.semantic_metadata:
-            for discovery in execution_result.semantic_metadata.discoveries:
-                knowledge = Knowledge(
-                    type=KnowledgeType.DISCOVERY,
-                    category="execution",
-                    content=discovery,
-                    source_task=self._task_description or "unknown",
-                    confidence=KnowledgeConfidence.MEDIUM,
-                )
-                knowledge_list.append(knowledge)
-
-        # Extract lessons from failures
-        if execution_result.status.value == "failure":
-            lesson = Knowledge(
-                type=KnowledgeType.LESSON,
-                category="error_handling",
-                content=f"失敗: {execution_result.output[:100]}",
-                source_task=self._task_description or "unknown",
-                confidence=KnowledgeConfidence.LOW,
+        for entry in llm_output.knowledge_entries:
+            knowledge_type = _KNOWLEDGE_TYPE_MAP.get(
+                entry.type, KnowledgeType.DISCOVERY
             )
-            knowledge_list.append(lesson)
+            confidence = _CONFIDENCE_MAP.get(
+                entry.confidence, KnowledgeConfidence.MEDIUM
+            )
+            knowledge = Knowledge(
+                type=knowledge_type,
+                category=entry.category,
+                content=entry.content,
+                source_task=self._task_description or "unknown",
+                confidence=confidence,
+            )
+            knowledge_list.append(knowledge)
 
         return summary, knowledge_list
 
