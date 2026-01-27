@@ -1,7 +1,14 @@
 """Unit tests for data models."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pytest
 from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from endless8.models import (
     CriteriaEvaluation,
@@ -19,6 +26,71 @@ from endless8.models import (
     SummaryMetadata,
     TaskInput,
 )
+
+
+class TestRawOutputContextConfig:
+    """Tests for raw_output_context configuration field."""
+
+    def test_raw_output_context_default_is_zero(self) -> None:
+        """Test that raw_output_context defaults to 0."""
+        from endless8.config import EngineConfig
+
+        config = EngineConfig(task="テスト", criteria=["条件"])
+        assert config.raw_output_context == 0
+
+    def test_raw_output_context_configurable(self) -> None:
+        """Test that raw_output_context can be set to 1."""
+        from endless8.config import EngineConfig
+
+        config = EngineConfig(task="テスト", criteria=["条件"], raw_output_context=1)
+        assert config.raw_output_context == 1
+
+    def test_raw_output_context_validation_rejects_invalid(self) -> None:
+        """Test that values >= 2 and negative values are rejected."""
+        from endless8.config import EngineConfig
+
+        with pytest.raises(ValidationError):
+            EngineConfig(task="テスト", criteria=["条件"], raw_output_context=2)
+
+        with pytest.raises(ValidationError):
+            EngineConfig(task="テスト", criteria=["条件"], raw_output_context=-1)
+
+    def test_yaml_config_with_raw_output_context(self, tmp_path: Path) -> None:
+        """Test that raw_output_context is parsed from YAML."""
+
+        import yaml
+
+        from endless8.config import load_config
+
+        config_file = tmp_path / "config.yaml"
+        config_data = {
+            "task": "テスト",
+            "criteria": ["条件"],
+            "raw_output_context": 1,
+        }
+        config_file.write_text(yaml.dump(config_data), encoding="utf-8")
+
+        config = load_config(config_file)
+        assert config.raw_output_context == 1
+
+    def test_yaml_config_without_raw_output_context_defaults_to_zero(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that YAML without raw_output_context defaults to 0."""
+
+        import yaml
+
+        from endless8.config import load_config
+
+        config_file = tmp_path / "config.yaml"
+        config_data = {
+            "task": "テスト",
+            "criteria": ["条件"],
+        }
+        config_file.write_text(yaml.dump(config_data), encoding="utf-8")
+
+        config = load_config(config_file)
+        assert config.raw_output_context == 0
 
 
 class TestTaskInput:

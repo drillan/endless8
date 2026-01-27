@@ -54,6 +54,9 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
   - 省略時も `.e8/tasks/<task_id>/history.jsonl` に自動保存される
 - `history_context_size`: 参照する履歴件数（デフォルト: 5）
 - `knowledge_context_size`: 参照するナレッジ件数（デフォルト: 10）
+- `raw_output_context`: 直前イテレーションの生出力参照の有効化（デフォルト: 0）
+  - `0`: 生出力を参照しない（デフォルト）
+  - `1`: 直前イテレーションの生出力を実行エージェントに渡す
 
 ### ロギング（`logging`）
 
