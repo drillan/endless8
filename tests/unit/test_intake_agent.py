@@ -233,6 +233,43 @@ class TestIntakeAgent:
             assert "WebSearch" in result.suggested_tools
             assert "WebFetch" in result.suggested_tools
 
+    async def test_intake_agent_minimal_tools_for_creative_task(
+        self,
+    ) -> None:
+        """Test that intake agent suggests minimal tools for creative/writing tasks."""
+        from endless8.agents.intake import IntakeAgent
+
+        with patch("endless8.agents.intake.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=IntakeResult(
+                    status=IntakeStatus.ACCEPTED,
+                    task="秋の季語を使った俳句を3つ作成する",
+                    criteria=[
+                        "5-7-5の音数律に従っている",
+                        "歳時記に掲載されている正式な秋の季語を使用している",
+                        "3つの俳句が作成されている",
+                    ],
+                    suggested_tools=[],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+
+            agent = IntakeAgent()
+            result = await agent.run(
+                task="秋の季語を使った俳句を3つ作成する",
+                criteria=[
+                    "5-7-5の音数律に従っている",
+                    "歳時記に掲載されている正式な秋の季語を使用している",
+                    "3つの俳句が作成されている",
+                ],
+            )
+
+            assert result.status == IntakeStatus.ACCEPTED
+            # Creative/writing tasks should not suggest WebSearch or WebFetch
+            assert "WebSearch" not in (result.suggested_tools or [])
+            assert "WebFetch" not in (result.suggested_tools or [])
+
     async def test_intake_agent_default_empty_suggested_tools(
         self,
     ) -> None:
