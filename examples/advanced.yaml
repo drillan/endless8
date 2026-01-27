@@ -16,6 +16,12 @@ persist: ".e8/auth-task/history.jsonl"
 # 履歴参照件数（コンテキスト効率化）
 history_context_size: 5
 
+# ナレッジ参照件数
+knowledge_context_size: 10
+
+# 直前イテレーションの生出力参照（0: 無効, 1: 有効）
+raw_output_context: 0
+
 # ロギングオプション
 logging:
   raw_log: true
