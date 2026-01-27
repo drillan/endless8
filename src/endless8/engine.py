@@ -124,10 +124,18 @@ class Engine:
                 logger.info("Resuming from iteration %d", self._start_iteration)
 
             # Restore previous output from output.md for raw_output_context
-            if self._config.raw_output_context >= 1:
+            if self._should_track_raw_output:
                 output_path = self._history_store.path.parent / "output.md"
-                if output_path.exists():
-                    self._previous_output = output_path.read_text(encoding="utf-8")
+                try:
+                    content = output_path.read_text(encoding="utf-8")
+                    self._previous_output = content if content else None
+                except FileNotFoundError:
+                    logger.debug("No output.md found for resume")
+                except (OSError, UnicodeDecodeError):
+                    logger.warning(
+                        "Failed to read output.md for raw_output_context",
+                        exc_info=True,
+                    )
 
     @property
     def is_running(self) -> bool:
@@ -139,6 +147,10 @@ class Engine:
         """Current iteration number (0 = not started)."""
         return self._current_iteration
 
+    @property
+    def _should_track_raw_output(self) -> bool:
+        return self._config.raw_output_context >= 1
+
     def _save_output_md(self, output: str) -> None:
         """Save execution output to output.md."""
         if not self._history_store:
@@ -147,7 +159,10 @@ class Engine:
             output_path = self._history_store.path.parent / "output.md"
             output_path.write_text(output, encoding="utf-8")
         except OSError:
-            logger.warning("Failed to write output.md", exc_info=True)
+            logger.warning(
+                "Failed to write output.md; raw_output_context will not be available on resume",
+                exc_info=True,
+            )
 
     async def _get_history_context(self) -> str:
         """Get formatted history context for execution agent.
@@ -383,7 +398,7 @@ class Engine:
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
                     raw_output_context=self._previous_output
-                    if self._config.raw_output_context >= 1
+                    if self._should_track_raw_output
                     else None,
                 )
 
@@ -401,7 +416,7 @@ class Engine:
                     self._save_output_md(execution_result.output)
 
                     # Update previous output for next iteration
-                    if self._config.raw_output_context >= 1:
+                    if self._should_track_raw_output:
                         self._previous_output = execution_result.output
                 else:
                     raise RuntimeError("Execution agent not configured")
@@ -566,7 +581,7 @@ class Engine:
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
                     raw_output_context=self._previous_output
-                    if self._config.raw_output_context >= 1
+                    if self._should_track_raw_output
                     else None,
                 )
 
@@ -577,7 +592,7 @@ class Engine:
                     self._save_output_md(execution_result.output)
 
                     # Update previous output for next iteration
-                    if self._config.raw_output_context >= 1:
+                    if self._should_track_raw_output:
                         self._previous_output = execution_result.output
                 else:
                     raise RuntimeError("Execution agent not configured")

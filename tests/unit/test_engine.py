@@ -1686,3 +1686,136 @@ class TestRawOutputContext:
         # raw_output_context should be None since no output.md
         ctx: ExecutionContext = mock_execution_agent.run.call_args[0][0]
         assert ctx.raw_output_context is None
+
+    async def test_raw_output_context_zero_resume_ignores_output_md(
+        self,
+        tmp_path: Path,
+        mock_intake_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_complete: AsyncMock,
+    ) -> None:
+        """Test that raw_output_context=0 + resume + output.md exists → ctx.raw_output_context is None."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.history import History
+
+        history_path = tmp_path / "history.jsonl"
+        history = History(history_path)
+
+        # Write output.md to simulate previous execution
+        output_md_path = tmp_path / "output.md"
+        output_md_path.write_text("前回の出力内容", encoding="utf-8")
+
+        # Write a history entry so resume knows to start from iteration 2
+        summary = ExecutionSummary(
+            iteration=1,
+            approach="アプローチ",
+            result=ExecutionStatus.SUCCESS,
+            reason="理由",
+            artifacts=[],
+            metadata=SummaryMetadata(),
+            timestamp="2026-01-27T10:00:00Z",
+        )
+        await history.append(summary)
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="新しい出力",
+            artifacts=[],
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+            max_iterations=5,
+            raw_output_context=0,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_complete,
+            history=history,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=5)
+        await engine.run(task_input, resume=True)
+
+        # raw_output_context should be None even though output.md exists
+        ctx: ExecutionContext = mock_execution_agent.run.call_args[0][0]
+        assert ctx.raw_output_context is None
+
+    async def test_raw_output_context_zero_multi_iteration_stays_none(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Test that raw_output_context=0 + 2 iterations → 2nd iteration also has None."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        call_count = 0
+
+        async def execution_side_effect(_ctx: ExecutionContext) -> ExecutionResult:
+            nonlocal call_count
+            call_count += 1
+            return ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                output=f"出力{call_count}",
+                artifacts=[],
+            )
+
+        mock_execution_agent = AsyncMock()
+        mock_execution_agent.run.side_effect = execution_side_effect
+
+        judgment_count = 0
+
+        def judgment_side_effect(_ctx: object) -> JudgmentResult:
+            nonlocal judgment_count
+            judgment_count += 1
+            return JudgmentResult(
+                is_complete=(judgment_count >= 2),
+                evaluations=[
+                    CriteriaEvaluation(
+                        criterion="条件",
+                        is_met=(judgment_count >= 2),
+                        evidence="達成" if judgment_count >= 2 else "未達成",
+                        confidence=1.0,
+                    )
+                ],
+                overall_reason="完了" if judgment_count >= 2 else "未完了",
+            )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.side_effect = judgment_side_effect
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+            max_iterations=5,
+            raw_output_context=0,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=["条件"], max_iterations=5)
+        await engine.run(task_input)
+
+        # 2 iterations should have happened
+        assert mock_execution_agent.run.call_count == 2
+
+        # Both calls should have raw_output_context=None
+        ctx1: ExecutionContext = mock_execution_agent.run.call_args_list[0][0][0]
+        assert ctx1.raw_output_context is None
+
+        ctx2: ExecutionContext = mock_execution_agent.run.call_args_list[1][0][0]
+        assert ctx2.raw_output_context is None

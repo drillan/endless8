@@ -1,5 +1,7 @@
 """Configuration models for endless8."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -54,7 +56,9 @@ class EngineConfig(BaseModel):
     history_context_size: int = Field(
         default=5, ge=1, le=20, description="履歴参照件数"
     )
-    raw_output_context: int = Field(default=0, ge=0, le=1, description="生出力参照件数")
+    raw_output_context: Literal[0, 1] = Field(
+        default=0, description="生出力参照: 0=無効, 1=有効"
+    )
     knowledge_context_size: int = Field(
         default=10, ge=1, le=50, description="ナレッジ参照件数"
     )
