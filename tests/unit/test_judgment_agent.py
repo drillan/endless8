@@ -292,3 +292,114 @@ class TestJudgmentAgent:
             assert len(result.evaluations) == 2
             # Research task should be evaluated correctly
             assert all(e.is_met for e in result.evaluations)
+
+
+class TestJudgmentAgentMaxTurnsValidation:
+    """Tests for JudgmentAgent max_turns validation."""
+
+    def test_max_turns_zero_raises_value_error(self) -> None:
+        """Test that max_turns=0 raises ValueError."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            JudgmentAgent(max_turns=0)
+
+    def test_max_turns_negative_raises_value_error(self) -> None:
+        """Test that negative max_turns raises ValueError."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            JudgmentAgent(max_turns=-5)
+
+
+class TestJudgmentAgentMaxTurns:
+    """Tests for JudgmentAgent max_turns parameter."""
+
+    @pytest.fixture
+    def judgment_context(self) -> JudgmentContext:
+        """Create sample judgment context."""
+        return JudgmentContext(
+            task="テスト",
+            criteria=["条件"],
+            execution_summary=ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-23T10:00:00Z",
+            ),
+        )
+
+    async def test_max_turns_custom_value(
+        self,
+        judgment_context: JudgmentContext,
+    ) -> None:
+        """Test that custom max_turns is passed to create_agent_model."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with (
+            patch("endless8.agents.judgment.Agent") as mock_agent_class,
+            patch("endless8.agents.judgment.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=JudgmentResult(
+                    is_complete=True,
+                    evaluations=[
+                        CriteriaEvaluation(
+                            criterion="条件",
+                            is_met=True,
+                            evidence="証拠",
+                            confidence=0.9,
+                        )
+                    ],
+                    overall_reason="完了",
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = JudgmentAgent(max_turns=25)
+            await agent.run(judgment_context)
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 25
+
+    async def test_max_turns_default_value(
+        self,
+        judgment_context: JudgmentContext,
+    ) -> None:
+        """Test that default max_turns is 10."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with (
+            patch("endless8.agents.judgment.Agent") as mock_agent_class,
+            patch("endless8.agents.judgment.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=JudgmentResult(
+                    is_complete=True,
+                    evaluations=[
+                        CriteriaEvaluation(
+                            criterion="条件",
+                            is_met=True,
+                            evidence="証拠",
+                            confidence=0.9,
+                        )
+                    ],
+                    overall_reason="完了",
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = JudgmentAgent()
+            await agent.run(judgment_context)
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 10

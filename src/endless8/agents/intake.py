@@ -82,15 +82,20 @@ class IntakeAgent:
         self,
         model_name: str = "anthropic:claude-sonnet-4-5",
         timeout: float = 300.0,
+        max_turns: int = 10,
     ) -> None:
         """Initialize the intake agent.
 
         Args:
             model_name: Name of the model to use for the agent.
             timeout: Timeout in seconds for SDK queries.
+            max_turns: Maximum number of turns for the agent.
         """
+        if max_turns < 1:
+            raise ValueError(f"max_turns must be >= 1, got {max_turns}")
         self._model_name = model_name
         self._timeout = timeout
+        self._max_turns = max_turns
 
     def _build_prompt(
         self,
@@ -149,7 +154,7 @@ class IntakeAgent:
         """
         model = create_agent_model(
             self._model_name,
-            max_turns=10,
+            max_turns=self._max_turns,
             allowed_tools=[],  # No tools - pure text/JSON output only
             timeout=self._timeout,
         )

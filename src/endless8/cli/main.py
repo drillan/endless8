@@ -297,20 +297,33 @@ def run(
 
             message_callback = on_message
 
+        max_turns = engine_config.claude_options.max_turns
         engine = Engine(
             config=engine_config,
-            intake_agent=IntakeAgent(timeout=engine_config.claude_options.timeout),
+            intake_agent=IntakeAgent(
+                model_name=engine_config.agent_model,
+                timeout=engine_config.claude_options.timeout,
+                max_turns=max_turns.intake,
+            ),
             execution_agent=ExecutionAgent(
+                append_system_prompt=engine_config.prompts.append_system_prompt,
+                model_name=engine_config.agent_model,
                 allowed_tools=engine_config.claude_options.allowed_tools,
                 timeout=engine_config.claude_options.timeout,
                 message_callback=message_callback,
+                max_turns=max_turns.execution,
             ),
             summary_agent=SummaryAgent(
                 task_description=task,
                 model_name=engine_config.agent_model,
                 timeout=engine_config.claude_options.timeout,
+                max_turns=max_turns.summary,
             ),
-            judgment_agent=JudgmentAgent(timeout=engine_config.claude_options.timeout),
+            judgment_agent=JudgmentAgent(
+                model_name=engine_config.agent_model,
+                timeout=engine_config.claude_options.timeout,
+                max_turns=max_turns.judgment,
+            ),
             history=history_store,
             knowledge_base=knowledge_base,
         )

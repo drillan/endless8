@@ -1170,6 +1170,179 @@ class TestListCommandStatusParsing:
         assert re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", result.output)
 
 
+class TestMaxTurnsWiring:
+    """Tests for max_turns wiring from config to agents."""
+
+    def _create_completed_result(self) -> LoopResult:
+        """Create a completed LoopResult."""
+        judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+        return LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=1,
+            final_judgment=judgment,
+        )
+
+    def test_max_turns_from_config_passed_to_all_agents(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that max_turns from YAML config are passed to all agents."""
+        import yaml
+
+        config_data = {
+            "task": "テスト",
+            "criteria": ["条件"],
+            "claude_options": {
+                "max_turns": {
+                    "intake": 5,
+                    "execution": 100,
+                    "summary": 15,
+                    "judgment": 25,
+                },
+            },
+        }
+        config_file = temp_dir / "config.yaml"
+        config_file.write_text(yaml.dump(config_data))
+
+        mock_result = self._create_completed_result()
+
+        with (
+            patch("endless8.cli.main.Engine") as mock_engine_class,
+            patch("endless8.cli.main.IntakeAgent") as mock_intake,
+            patch("endless8.cli.main.ExecutionAgent") as mock_execution,
+            patch("endless8.cli.main.SummaryAgent") as mock_summary,
+            patch("endless8.cli.main.JudgmentAgent") as mock_judgment,
+        ):
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert result.exit_code == 0, f"CLI failed: {result.output}"
+
+            # Verify max_turns passed to each agent
+            mock_intake.assert_called_once()
+            assert mock_intake.call_args.kwargs["max_turns"] == 5
+
+            mock_execution.assert_called_once()
+            assert mock_execution.call_args.kwargs["max_turns"] == 100
+
+            mock_summary.assert_called_once()
+            assert mock_summary.call_args.kwargs["max_turns"] == 15
+
+            mock_judgment.assert_called_once()
+            assert mock_judgment.call_args.kwargs["max_turns"] == 25
+
+
+class TestModelNameWiring:
+    """Tests for model_name wiring from config to all agents."""
+
+    def _create_completed_result(self) -> LoopResult:
+        """Create a completed LoopResult."""
+        judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="達成",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="完了",
+        )
+        return LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=1,
+            final_judgment=judgment,
+        )
+
+    def test_model_name_passed_to_all_agents(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that agent_model from config is passed to all 4 agents."""
+        import yaml
+
+        config_data = {
+            "task": "テスト",
+            "criteria": ["条件"],
+            "agent_model": "anthropic:claude-haiku-3-5",
+        }
+        config_file = temp_dir / "config.yaml"
+        config_file.write_text(yaml.dump(config_data))
+
+        mock_result = self._create_completed_result()
+
+        with (
+            patch("endless8.cli.main.Engine") as mock_engine_class,
+            patch("endless8.cli.main.IntakeAgent") as mock_intake,
+            patch("endless8.cli.main.ExecutionAgent") as mock_execution,
+            patch("endless8.cli.main.SummaryAgent") as mock_summary,
+            patch("endless8.cli.main.JudgmentAgent") as mock_judgment,
+        ):
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert result.exit_code == 0, f"CLI failed: {result.output}"
+
+            # Verify model_name passed to each agent
+            mock_intake.assert_called_once()
+            assert (
+                mock_intake.call_args.kwargs["model_name"]
+                == "anthropic:claude-haiku-3-5"
+            )
+
+            mock_execution.assert_called_once()
+            assert (
+                mock_execution.call_args.kwargs["model_name"]
+                == "anthropic:claude-haiku-3-5"
+            )
+
+            mock_summary.assert_called_once()
+            assert (
+                mock_summary.call_args.kwargs["model_name"]
+                == "anthropic:claude-haiku-3-5"
+            )
+
+            mock_judgment.assert_called_once()
+            assert (
+                mock_judgment.call_args.kwargs["model_name"]
+                == "anthropic:claude-haiku-3-5"
+            )
+
+
 class TestStatusCommandKnowledge:
     """Tests for status command knowledge handling."""
 

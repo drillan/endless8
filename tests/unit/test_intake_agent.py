@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from endless8.models import (
     IntakeResult,
     IntakeStatus,
@@ -295,3 +297,77 @@ class TestIntakeAgent:
             )
 
             assert result.suggested_tools == []
+
+
+class TestIntakeAgentMaxTurnsValidation:
+    """Tests for IntakeAgent max_turns validation."""
+
+    def test_max_turns_zero_raises_value_error(self) -> None:
+        """Test that max_turns=0 raises ValueError."""
+        from endless8.agents.intake import IntakeAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            IntakeAgent(max_turns=0)
+
+    def test_max_turns_negative_raises_value_error(self) -> None:
+        """Test that negative max_turns raises ValueError."""
+        from endless8.agents.intake import IntakeAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            IntakeAgent(max_turns=-5)
+
+
+class TestIntakeAgentMaxTurns:
+    """Tests for IntakeAgent max_turns parameter."""
+
+    async def test_max_turns_custom_value(self) -> None:
+        """Test that custom max_turns is passed to create_agent_model."""
+        from endless8.agents.intake import IntakeAgent
+
+        with (
+            patch("endless8.agents.intake.Agent") as mock_agent_class,
+            patch("endless8.agents.intake.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=IntakeResult(
+                    status=IntakeStatus.ACCEPTED,
+                    task="タスク",
+                    criteria=["条件"],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = IntakeAgent(max_turns=20)
+            await agent.run(task="タスク", criteria=["条件"])
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 20
+
+    async def test_max_turns_default_value(self) -> None:
+        """Test that default max_turns is 10."""
+        from endless8.agents.intake import IntakeAgent
+
+        with (
+            patch("endless8.agents.intake.Agent") as mock_agent_class,
+            patch("endless8.agents.intake.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=IntakeResult(
+                    status=IntakeStatus.ACCEPTED,
+                    task="タスク",
+                    criteria=["条件"],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = IntakeAgent()
+            await agent.run(task="タスク", criteria=["条件"])
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 10

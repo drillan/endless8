@@ -53,11 +53,21 @@ def create_agent_model(
             message_callback=message_callback,
         )
 
-    # claudecode-model is not available
+    # claudecode-model is not available — warn about ignored parameters
+    ignored: list[str] = []
+    if max_turns != 10:
+        ignored.append(f"max_turns={max_turns}")
+    if allowed_tools is not None:
+        ignored.append(f"allowed_tools={allowed_tools}")
+    if timeout != 300.0:
+        ignored.append(f"timeout={timeout}")
     if message_callback is not None:
+        ignored.append("message_callback=<callback>")
+    if ignored:
         logger.warning(
-            "message_callback was specified but claudecode-model is not available. "
-            "Verbose output will not be displayed."
+            "claudecode-model is not available; the following parameters will be "
+            "ignored: %s",
+            ", ".join(ignored),
         )
     return model_name
 

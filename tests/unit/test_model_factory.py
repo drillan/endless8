@@ -1,6 +1,9 @@
 """Unit tests for the model factory."""
 
+import logging
 from unittest.mock import patch
+
+import pytest
 
 
 class TestCreateAgentModel:
@@ -157,6 +160,59 @@ class TestCreateAgentModel:
 
             # Should return model string, callback is ignored
             assert model == "anthropic:claude-sonnet-4-5"
+
+
+class TestWarningWhenParamsIgnored:
+    """Tests for warning when parameters are ignored without claudecode."""
+
+    def test_warns_when_params_ignored_without_claudecode(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test that non-default params produce a warning when claudecode is unavailable."""
+        from endless8.agents.model_factory import create_agent_model
+
+        def callback(message: object) -> None:
+            pass
+
+        with (
+            patch("endless8.agents.model_factory._CLAUDECODE_AVAILABLE", False),
+            caplog.at_level(logging.WARNING, logger="endless8.agents.model_factory"),
+        ):
+            create_agent_model(
+                "anthropic:claude-sonnet-4-5",
+                max_turns=100,
+                allowed_tools=["Read"],
+                timeout=600.0,
+                message_callback=callback,
+            )
+
+        assert len(caplog.records) == 1
+        warning_msg = caplog.records[0].message
+        assert "max_turns" in warning_msg
+        assert "allowed_tools" in warning_msg
+        assert "timeout" in warning_msg
+        assert "message_callback" in warning_msg
+
+    def test_no_warning_when_all_defaults_and_claudecode_unavailable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test that default params produce no warning when claudecode is unavailable."""
+        from endless8.agents.model_factory import create_agent_model
+
+        with (
+            patch("endless8.agents.model_factory._CLAUDECODE_AVAILABLE", False),
+            caplog.at_level(logging.WARNING, logger="endless8.agents.model_factory"),
+        ):
+            create_agent_model("anthropic:claude-sonnet-4-5")
+
+        # No warning should be logged (import-time warning doesn't count)
+        model_factory_warnings = [
+            r
+            for r in caplog.records
+            if r.name == "endless8.agents.model_factory"
+            and "not available" not in r.message
+        ]
+        assert len(model_factory_warnings) == 0
 
 
 class TestIsClaudeCodeAvailable:

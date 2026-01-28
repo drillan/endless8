@@ -8,6 +8,7 @@ from endless8.config.settings import (
     ClaudeOptions,
     EngineConfig,
     LoggingOptions,
+    MaxTurnsConfig,
     PromptsConfig,
 )
 
@@ -15,6 +16,7 @@ __all__ = [
     "ClaudeOptions",
     "EngineConfig",
     "LoggingOptions",
+    "MaxTurnsConfig",
     "PromptsConfig",
     "load_config",
 ]

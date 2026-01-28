@@ -149,6 +149,8 @@
 - **FR-034**: CLIは `--verbose` オプションで、実行中のツールコールとテキスト応答をリアルタイム表示できなければならない
   - ツールコール: `→ ツール名` 形式
   - テキスト応答: `📝 テキスト...` 形式（先頭80文字）
+- **FR-035**: 設定ファイルでエージェントごとの `max_turns`（最大ターン数）を定義できなければならない。
+  未指定のエージェントはデフォルト値（intake: 10, execution: 50, summary: 10, judgment: 10）を使用する
 
 ### Key Entities
 
@@ -379,6 +381,9 @@ claude_options:
   model: "sonnet"
   output_format: "stream-json"  # サマリエージェントが解析するため
   verbose: true
+  # エージェントごとの最大ターン数
+  max_turns:
+    judgment: 25  # デフォルト: 10
 
 # エージェントプロンプトのカスタマイズ
 prompts:
@@ -447,3 +452,5 @@ prompts:
 - Q: history.jsonl に保存するレコードタイプは？ → A: ExecutionSummary + JudgmentResult + LoopResult（最終結果）の3種類
 - Q: JudgmentResult の保存タイミングは？ → A: 毎イテレーション終了時（判定完了後に即座に保存）
 - Q: LoopResult の保存条件は？ → A: すべての終了ケース（completed, max_iterations, error, cancelled）で保存
+- Q: エージェントごとの max_turns を設定できるか？ → A: はい、claude_options.max_turns で定義可能。
+  未指定のエージェントはデフォルト値を使用（intake: 10, execution: 50, summary: 10, judgment: 10）

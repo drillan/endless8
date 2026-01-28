@@ -263,6 +263,97 @@ class TestExecutionAgent:
             assert call_kwargs.kwargs.get("message_callback") is None
 
 
+class TestExecutionAgentMaxTurnsValidation:
+    """Tests for ExecutionAgent max_turns validation."""
+
+    def test_max_turns_zero_raises_value_error(self) -> None:
+        """Test that max_turns=0 raises ValueError."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            ExecutionAgent(max_turns=0)
+
+    def test_max_turns_negative_raises_value_error(self) -> None:
+        """Test that negative max_turns raises ValueError."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            ExecutionAgent(max_turns=-5)
+
+
+class TestExecutionAgentMaxTurns:
+    """Tests for ExecutionAgent max_turns parameter."""
+
+    @pytest.fixture
+    def execution_context(self) -> ExecutionContext:
+        """Create sample execution context."""
+        return ExecutionContext(
+            task="テスト",
+            criteria=["条件"],
+            iteration=1,
+            history_context="なし",
+            knowledge_context="なし",
+        )
+
+    async def test_max_turns_custom_value(
+        self,
+        execution_context: ExecutionContext,
+    ) -> None:
+        """Test that custom max_turns is passed to create_agent_model."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with (
+            patch("endless8.agents.execution.Agent") as mock_agent_class,
+            patch("endless8.agents.execution.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=ExecutionResult(
+                    status=ExecutionStatus.SUCCESS,
+                    output="完了",
+                    artifacts=[],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = ExecutionAgent(max_turns=100)
+            await agent.run(execution_context)
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 100
+
+    async def test_max_turns_default_value(
+        self,
+        execution_context: ExecutionContext,
+    ) -> None:
+        """Test that default max_turns is 50."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with (
+            patch("endless8.agents.execution.Agent") as mock_agent_class,
+            patch("endless8.agents.execution.create_agent_model") as mock_create_model,
+        ):
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(
+                output=ExecutionResult(
+                    status=ExecutionStatus.SUCCESS,
+                    output="完了",
+                    artifacts=[],
+                )
+            )
+            mock_agent_class.return_value = mock_agent
+            mock_create_model.return_value = "mock_model"
+
+            agent = ExecutionAgent()
+            await agent.run(execution_context)
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 50
+
+
 class TestRawOutputContextPrompt:
     """Tests for raw_output_context in prompt generation."""
 
