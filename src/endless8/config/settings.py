@@ -2,11 +2,13 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MaxTurnsConfig(BaseModel):
     """エージェントごとの max_turns 設定。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     intake: int = Field(default=10, ge=1, le=200)
     execution: int = Field(default=50, ge=1, le=200)

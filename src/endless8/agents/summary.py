@@ -224,6 +224,8 @@ class SummaryAgent:
             timeout: Timeout for LLM calls in seconds.
             max_turns: Maximum number of turns for the agent.
         """
+        if max_turns < 1:
+            raise ValueError(f"max_turns must be >= 1, got {max_turns}")
         self._task_description = task_description
         self._model_name = model_name
         self._timeout = timeout

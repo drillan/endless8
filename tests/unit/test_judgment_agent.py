@@ -294,6 +294,24 @@ class TestJudgmentAgent:
             assert all(e.is_met for e in result.evaluations)
 
 
+class TestJudgmentAgentMaxTurnsValidation:
+    """Tests for JudgmentAgent max_turns validation."""
+
+    def test_max_turns_zero_raises_value_error(self) -> None:
+        """Test that max_turns=0 raises ValueError."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            JudgmentAgent(max_turns=0)
+
+    def test_max_turns_negative_raises_value_error(self) -> None:
+        """Test that negative max_turns raises ValueError."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            JudgmentAgent(max_turns=-5)
+
+
 class TestJudgmentAgentMaxTurns:
     """Tests for JudgmentAgent max_turns parameter."""
 

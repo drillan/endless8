@@ -69,6 +69,8 @@ class ExecutionAgent:
             message_callback: Optional callback for message events.
             max_turns: Maximum number of turns for the agent.
         """
+        if max_turns < 1:
+            raise ValueError(f"max_turns must be >= 1, got {max_turns}")
         self._append_system_prompt = append_system_prompt
         self._model_name = model_name
         self._allowed_tools = allowed_tools

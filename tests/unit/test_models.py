@@ -144,6 +144,43 @@ class TestMaxTurnsConfig:
         with pytest.raises(ValidationError):
             MaxTurnsConfig(judgment=300)
 
+    def test_extra_fields_rejected(self) -> None:
+        """Test that typo/extra fields raise ValidationError."""
+        from endless8.config import MaxTurnsConfig
+
+        with pytest.raises(ValidationError):
+            MaxTurnsConfig(intke=10)  # type: ignore[call-arg]  # intentional typo
+        with pytest.raises(ValidationError):
+            MaxTurnsConfig(executin=50)  # type: ignore[call-arg]  # intentional typo
+
+    def test_frozen_prevents_mutation(self) -> None:
+        """Test that constructed MaxTurnsConfig cannot be mutated."""
+        from endless8.config import MaxTurnsConfig
+
+        config = MaxTurnsConfig()
+        with pytest.raises(ValidationError):
+            config.intake = 20  # type: ignore[misc]  # intentional mutation test
+
+    def test_boundary_value_min_accepted(self) -> None:
+        """Test that minimum boundary value (1) is accepted for all fields."""
+        from endless8.config import MaxTurnsConfig
+
+        config = MaxTurnsConfig(intake=1, execution=1, summary=1, judgment=1)
+        assert config.intake == 1
+        assert config.execution == 1
+        assert config.summary == 1
+        assert config.judgment == 1
+
+    def test_boundary_value_max_accepted(self) -> None:
+        """Test that maximum boundary value (200) is accepted for all fields."""
+        from endless8.config import MaxTurnsConfig
+
+        config = MaxTurnsConfig(intake=200, execution=200, summary=200, judgment=200)
+        assert config.intake == 200
+        assert config.execution == 200
+        assert config.summary == 200
+        assert config.judgment == 200
+
     def test_claude_options_dict_parse(self) -> None:
         """Test that ClaudeOptions accepts max_turns as dict."""
         from endless8.config import ClaudeOptions

@@ -263,6 +263,24 @@ class TestExecutionAgent:
             assert call_kwargs.kwargs.get("message_callback") is None
 
 
+class TestExecutionAgentMaxTurnsValidation:
+    """Tests for ExecutionAgent max_turns validation."""
+
+    def test_max_turns_zero_raises_value_error(self) -> None:
+        """Test that max_turns=0 raises ValueError."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            ExecutionAgent(max_turns=0)
+
+    def test_max_turns_negative_raises_value_error(self) -> None:
+        """Test that negative max_turns raises ValueError."""
+        from endless8.agents.execution import ExecutionAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            ExecutionAgent(max_turns=-5)
+
+
 class TestExecutionAgentMaxTurns:
     """Tests for ExecutionAgent max_turns parameter."""
 

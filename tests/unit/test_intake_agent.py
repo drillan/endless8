@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from endless8.models import (
     IntakeResult,
     IntakeStatus,
@@ -295,6 +297,24 @@ class TestIntakeAgent:
             )
 
             assert result.suggested_tools == []
+
+
+class TestIntakeAgentMaxTurnsValidation:
+    """Tests for IntakeAgent max_turns validation."""
+
+    def test_max_turns_zero_raises_value_error(self) -> None:
+        """Test that max_turns=0 raises ValueError."""
+        from endless8.agents.intake import IntakeAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            IntakeAgent(max_turns=0)
+
+    def test_max_turns_negative_raises_value_error(self) -> None:
+        """Test that negative max_turns raises ValueError."""
+        from endless8.agents.intake import IntakeAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            IntakeAgent(max_turns=-5)
 
 
 class TestIntakeAgentMaxTurns:

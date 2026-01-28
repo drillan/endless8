@@ -332,6 +332,24 @@ class TestSummaryAgent:
             assert "src/read_only.py" not in summary.metadata.files_modified
 
 
+class TestSummaryAgentMaxTurnsValidation:
+    """Tests for SummaryAgent max_turns validation."""
+
+    def test_max_turns_zero_raises_value_error(self) -> None:
+        """Test that max_turns=0 raises ValueError."""
+        from endless8.agents.summary import SummaryAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            SummaryAgent(max_turns=0)
+
+    def test_max_turns_negative_raises_value_error(self) -> None:
+        """Test that negative max_turns raises ValueError."""
+        from endless8.agents.summary import SummaryAgent
+
+        with pytest.raises(ValueError, match="max_turns must be >= 1"):
+            SummaryAgent(max_turns=-5)
+
+
 class TestSummaryAgentMaxTurns:
     """Tests for SummaryAgent max_turns parameter."""
 

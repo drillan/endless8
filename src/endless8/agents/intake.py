@@ -91,6 +91,8 @@ class IntakeAgent:
             timeout: Timeout in seconds for SDK queries.
             max_turns: Maximum number of turns for the agent.
         """
+        if max_turns < 1:
+            raise ValueError(f"max_turns must be >= 1, got {max_turns}")
         self._model_name = model_name
         self._timeout = timeout
         self._max_turns = max_turns
