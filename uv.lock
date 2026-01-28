@@ -317,7 +317,7 @@ wheels = [
 [[package]]
 name = "claude-agent-sdk"
 version = "0.1.20"
-source = { git = "https://github.com/drillan/claude-agent-sdk-python.git?branch=fix%2Fstring-prompt-mcp-transport#c1b9f8da1bba7614679b2ca95abfe8740a745ade" }
+source = { git = "https://github.com/drillan/claude-agent-sdk-python.git?branch=fix%2Fcombined-fixes#c9eca62f4cefa6575300bb365f697495fd38445d" }
 dependencies = [
     { name = "anyio" },
     { name = "mcp" },
@@ -325,8 +325,8 @@ dependencies = [
 
 [[package]]
 name = "claudecode-model"
-version = "0.0.14"
-source = { git = "https://github.com/drillan/claudecode-model.git#887c5899526ff6be0386ecb8535422c1d63d959d" }
+version = "0.0.18"
+source = { git = "https://github.com/drillan/claudecode-model.git#4714019c1e1dd5f3f75733eb0cd8579b69da9468" }
 dependencies = [
     { name = "claude-agent-sdk" },
     { name = "dacite" },
