@@ -5,6 +5,15 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class MaxTurnsConfig(BaseModel):
+    """エージェントごとの max_turns 設定。"""
+
+    intake: int = Field(default=10, ge=1, le=200)
+    execution: int = Field(default=50, ge=1, le=200)
+    summary: int = Field(default=10, ge=1, le=200)
+    judgment: int = Field(default=10, ge=1, le=200)
+
+
 class ClaudeOptions(BaseModel):
     """claude CLI オプション。"""
 
@@ -21,6 +30,7 @@ class ClaudeOptions(BaseModel):
         le=3600.0,
         description="SDK クエリのタイムアウト（秒）",
     )
+    max_turns: MaxTurnsConfig = Field(default_factory=MaxTurnsConfig)
 
 
 class LoggingOptions(BaseModel):

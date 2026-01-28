@@ -93,6 +93,98 @@ class TestRawOutputContextConfig:
         assert config.raw_output_context == 0
 
 
+class TestMaxTurnsConfig:
+    """Tests for MaxTurnsConfig model."""
+
+    def test_default_values(self) -> None:
+        """Test that MaxTurnsConfig has correct default values."""
+        from endless8.config import MaxTurnsConfig
+
+        config = MaxTurnsConfig()
+        assert config.intake == 10
+        assert config.execution == 50
+        assert config.summary == 10
+        assert config.judgment == 10
+
+    def test_partial_override(self) -> None:
+        """Test that individual fields can be overridden."""
+        from endless8.config import MaxTurnsConfig
+
+        config = MaxTurnsConfig(judgment=25)
+        assert config.intake == 10
+        assert config.execution == 50
+        assert config.summary == 10
+        assert config.judgment == 25
+
+    def test_full_override(self) -> None:
+        """Test that all fields can be overridden."""
+        from endless8.config import MaxTurnsConfig
+
+        config = MaxTurnsConfig(intake=5, execution=100, summary=20, judgment=30)
+        assert config.intake == 5
+        assert config.execution == 100
+        assert config.summary == 20
+        assert config.judgment == 30
+
+    def test_validation_min(self) -> None:
+        """Test that values below 1 are rejected."""
+        from endless8.config import MaxTurnsConfig
+
+        with pytest.raises(ValidationError):
+            MaxTurnsConfig(intake=0)
+        with pytest.raises(ValidationError):
+            MaxTurnsConfig(execution=-1)
+
+    def test_validation_max(self) -> None:
+        """Test that values above 200 are rejected."""
+        from endless8.config import MaxTurnsConfig
+
+        with pytest.raises(ValidationError):
+            MaxTurnsConfig(intake=201)
+        with pytest.raises(ValidationError):
+            MaxTurnsConfig(judgment=300)
+
+    def test_claude_options_dict_parse(self) -> None:
+        """Test that ClaudeOptions accepts max_turns as dict."""
+        from endless8.config import ClaudeOptions
+
+        options = ClaudeOptions(max_turns={"judgment": 25})
+        assert options.max_turns.judgment == 25
+        assert options.max_turns.intake == 10  # default
+
+    def test_engine_config_default_max_turns(self) -> None:
+        """Test that EngineConfig has default MaxTurnsConfig."""
+        from endless8.config import EngineConfig
+
+        config = EngineConfig(task="テスト", criteria=["条件"])
+        assert config.claude_options.max_turns.intake == 10
+        assert config.claude_options.max_turns.execution == 50
+        assert config.claude_options.max_turns.summary == 10
+        assert config.claude_options.max_turns.judgment == 10
+
+    def test_yaml_config_with_max_turns(self, tmp_path: Path) -> None:
+        """Test that max_turns is parsed from YAML config."""
+        import yaml
+
+        from endless8.config import load_config
+
+        config_data = {
+            "task": "テスト",
+            "criteria": ["条件"],
+            "claude_options": {
+                "max_turns": {
+                    "judgment": 25,
+                },
+            },
+        }
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(yaml.dump(config_data), encoding="utf-8")
+
+        config = load_config(config_file)
+        assert config.claude_options.max_turns.judgment == 25
+        assert config.claude_options.max_turns.intake == 10
+
+
 class TestTaskInput:
     """Tests for TaskInput model."""
 

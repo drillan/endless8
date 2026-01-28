@@ -48,15 +48,18 @@ class JudgmentAgent:
         self,
         model_name: str = "anthropic:claude-sonnet-4-5",
         timeout: float = 300.0,
+        max_turns: int = 10,
     ) -> None:
         """Initialize the judgment agent.
 
         Args:
             model_name: Name of the model to use for the agent.
             timeout: Timeout in seconds for SDK queries.
+            max_turns: Maximum number of turns for the agent.
         """
         self._model_name = model_name
         self._timeout = timeout
+        self._max_turns = max_turns
         self._agent: Agent[None, JudgmentResult] | None = None
 
     def _build_prompt(self, context: JudgmentContext) -> str:
@@ -106,7 +109,7 @@ class JudgmentAgent:
 
         model = create_agent_model(
             self._model_name,
-            max_turns=10,
+            max_turns=self._max_turns,
             allowed_tools=[],  # No tools - pure text/JSON output only
             timeout=self._timeout,
         )

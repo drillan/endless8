@@ -38,6 +38,9 @@ claude_options:
   model: "sonnet"
   output_format: "stream-json"
   verbose: true
+  # エージェントごとの最大ターン数
+  max_turns:
+    judgment: 25  # デフォルト: 10
 
 # プロンプトカスタマイズ
 prompts:

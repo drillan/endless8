@@ -332,6 +332,97 @@ class TestSummaryAgent:
             assert "src/read_only.py" not in summary.metadata.files_modified
 
 
+class TestSummaryAgentMaxTurns:
+    """Tests for SummaryAgent max_turns parameter."""
+
+    @pytest.fixture
+    def execution_result(self) -> ExecutionResult:
+        """Create sample execution result."""
+        return ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+
+    @pytest.fixture
+    def llm_output(self) -> SummaryLLMOutput:
+        """Create sample LLM output."""
+        return SummaryLLMOutput(
+            approach="アプローチ",
+            reason="理由",
+            artifacts=[],
+            next_action=None,
+            knowledge_entries=[],
+        )
+
+    def _mock_agent_run(self, llm_output: SummaryLLMOutput) -> AsyncMock:
+        """Create a mock for pydantic-ai Agent.run()."""
+        mock_result = MagicMock()
+        mock_result.output = llm_output
+        return AsyncMock(return_value=mock_result)
+
+    async def test_max_turns_custom_value(
+        self,
+        execution_result: ExecutionResult,
+        llm_output: SummaryLLMOutput,
+    ) -> None:
+        """Test that custom max_turns is passed to create_agent_model."""
+        from endless8.agents.summary import SummaryAgent
+
+        mock_run = self._mock_agent_run(llm_output)
+        with (
+            patch("endless8.agents.summary.Agent") as mock_agent_cls,
+            patch(
+                "endless8.agents.summary.create_agent_model",
+                return_value="test-model",
+            ) as mock_create_model,
+        ):
+            mock_agent_instance = MagicMock()
+            mock_agent_instance.run = mock_run
+            mock_agent_cls.return_value = mock_agent_instance
+
+            agent = SummaryAgent(
+                task_description="テスト",
+                model_name="test-model",
+                max_turns=20,
+            )
+            await agent.run(execution_result, iteration=1, criteria=["テスト条件"])
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 20
+
+    async def test_max_turns_default_value(
+        self,
+        execution_result: ExecutionResult,
+        llm_output: SummaryLLMOutput,
+    ) -> None:
+        """Test that default max_turns is 10."""
+        from endless8.agents.summary import SummaryAgent
+
+        mock_run = self._mock_agent_run(llm_output)
+        with (
+            patch("endless8.agents.summary.Agent") as mock_agent_cls,
+            patch(
+                "endless8.agents.summary.create_agent_model",
+                return_value="test-model",
+            ) as mock_create_model,
+        ):
+            mock_agent_instance = MagicMock()
+            mock_agent_instance.run = mock_run
+            mock_agent_cls.return_value = mock_agent_instance
+
+            agent = SummaryAgent(
+                task_description="テスト",
+                model_name="test-model",
+            )
+            await agent.run(execution_result, iteration=1, criteria=["テスト条件"])
+
+            mock_create_model.assert_called_once()
+            call_kwargs = mock_create_model.call_args
+            assert call_kwargs.kwargs.get("max_turns") == 10
+
+
 class TestSummaryAgentTimeout:
     """Tests for SummaryAgent timeout propagation."""
 

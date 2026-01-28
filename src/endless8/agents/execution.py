@@ -57,6 +57,7 @@ class ExecutionAgent:
         allowed_tools: list[str] | None = None,
         timeout: float = 300.0,
         message_callback: "MessageCallbackType | None" = None,
+        max_turns: int = 50,
     ) -> None:
         """Initialize the execution agent.
 
@@ -66,12 +67,14 @@ class ExecutionAgent:
             allowed_tools: List of allowed tool names for the agent.
             timeout: Timeout in seconds for SDK queries.
             message_callback: Optional callback for message events.
+            max_turns: Maximum number of turns for the agent.
         """
         self._append_system_prompt = append_system_prompt
         self._model_name = model_name
         self._allowed_tools = allowed_tools
         self._timeout = timeout
         self._message_callback = message_callback
+        self._max_turns = max_turns
 
     def _build_prompt(self, context: ExecutionContext) -> str:
         """Build the execution prompt from context.
@@ -119,7 +122,7 @@ class ExecutionAgent:
 
         model = create_agent_model(
             self._model_name,
-            max_turns=50,
+            max_turns=self._max_turns,
             allowed_tools=self._allowed_tools,
             timeout=self._timeout,
             message_callback=self._message_callback,

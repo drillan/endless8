@@ -214,6 +214,7 @@ class SummaryAgent:
         task_description: str = "",
         model_name: str = "anthropic:claude-sonnet-4-5",
         timeout: float = 300.0,
+        max_turns: int = 10,
     ) -> None:
         """Initialize the summary agent.
 
@@ -221,10 +222,12 @@ class SummaryAgent:
             task_description: Description of the current task for knowledge extraction.
             model_name: Model name for the pydantic-ai Agent.
             timeout: Timeout for LLM calls in seconds.
+            max_turns: Maximum number of turns for the agent.
         """
         self._task_description = task_description
         self._model_name = model_name
         self._timeout = timeout
+        self._max_turns = max_turns
 
     async def run(
         self,
@@ -263,7 +266,7 @@ class SummaryAgent:
 
         model = create_agent_model(
             self._model_name,
-            max_turns=10,
+            max_turns=self._max_turns,
             allowed_tools=[],
             timeout=self._timeout,
         )
