@@ -3,7 +3,12 @@
 pydantic-ai と claudecode-model を使用したコンテキスト効率の良いタスク実行ループエンジン。
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("endless8")
+except PackageNotFoundError:
+    __version__ = "0.0.0"  # 開発モード（未インストール時）
 
 from endless8.config import EngineConfig
 from endless8.engine import Engine
