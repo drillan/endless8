@@ -1,6 +1,6 @@
 [project]
 name = "endless8"
-version = "0.1.0"
+version = "0.0.1"
 description = "pydantic-ai と claudecode-model を使用したコンテキスト効率の良いタスク実行ループエンジン"
 readme = "README.md"
 authors = [
