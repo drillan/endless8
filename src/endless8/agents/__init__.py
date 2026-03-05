@@ -120,7 +120,7 @@ class SummaryAgentProtocol(Protocol):
 class CommandCriterionResult(BaseModel):
     """コマンド条件の判定結果（Engine 内部用）。
 
-    JudgmentContext に渡して LLM 判定のコンテキストとして使用。
+    TODO(T009): CommandExecutor 実装時に JudgmentContext.command_results として統合予定。
     """
 
     criterion_index: int = Field(

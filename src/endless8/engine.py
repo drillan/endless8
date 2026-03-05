@@ -17,7 +17,6 @@ from endless8.agents import ExecutionContext, JudgmentContext
 from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
 from endless8.models import (
-    CommandCriterion,
     CriterionInput,
     ExecutionResult,
     ExecutionSummary,
@@ -42,15 +41,7 @@ def _criteria_to_str_list(criteria: list[CriterionInput]) -> list[str]:
     Returns:
         list of str representations for each criterion
     """
-    result: list[str] = []
-    for c in criteria:
-        if isinstance(c, str):
-            result.append(c)
-        elif isinstance(c, CommandCriterion):
-            result.append(c.description or c.command)
-        else:
-            result.append(str(c))
-    return result
+    return [c if isinstance(c, str) else (c.description or c.command) for c in criteria]
 
 
 # Progress callback type
@@ -292,6 +283,9 @@ class Engine:
             if resume:
                 await self._initialize_from_history()
 
+            # Run intake validation
+            criteria_str = _criteria_to_str_list(task_input.criteria)
+
             # Emit task start event
             start_msg = (
                 "タスク再開" if resume and self._start_iteration > 1 else "タスク開始"
@@ -302,13 +296,10 @@ class Engine:
                 f"{start_msg}: {task_input.task[:50]}...",
                 data={
                     "task": task_input.task,
-                    "criteria": task_input.criteria,
+                    "criteria": criteria_str,
                     "resume": resume,
                 },
             )
-
-            # Run intake validation
-            criteria_str = _criteria_to_str_list(task_input.criteria)
             if self._intake_agent:
                 intake_result = await self._intake_agent.run(
                     task_input.task, criteria_str

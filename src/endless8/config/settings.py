@@ -5,10 +5,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULT_COMMAND_TIMEOUT_SEC: float = 30.0
-"""コマンド条件のデフォルトタイムアウト（秒）。"""
+"""コマンド条件のデフォルトタイムアウト（秒）。TODO(T009): CommandExecutor で使用予定。"""
 
 COMMAND_OUTPUT_MAX_BYTES: int = 10 * 1024
-"""コマンド出力の最大バイト数（10KB）。"""
+"""コマンド出力の最大バイト数（10KB）。TODO(T009): CommandExecutor で使用予定。"""
 
 
 class MaxTurnsConfig(BaseModel):
