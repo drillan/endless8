@@ -158,15 +158,10 @@ class TestEngineRawLog:
 
         await engine.run(task_input)
 
-        # Verify summary agent was called with raw_log_content parameter
+        # Verify summary agent was called with non-empty raw_log_content
         mock_summary_agent.run.assert_called_once()
         call_args = mock_summary_agent.run.call_args
-        # raw_log_content should be passed (positional or keyword)
-        if call_args.kwargs:
-            assert "raw_log_content" in call_args.kwargs
-        else:
-            # Check positional args - 4th arg is raw_log_content
-            assert len(call_args.args) >= 4
+        assert "raw_log_content" in call_args.kwargs
 
     async def test_raw_log_skipped_when_disabled(
         self,
@@ -334,3 +329,76 @@ class TestEngineRawLog:
         assert log_files[0].name == "iteration-1.jsonl"
         assert log_files[1].name == "iteration-2.jsonl"
         assert log_files[2].name == "iteration-3.jsonl"
+
+    async def test_run_iter_raw_log_saved_to_file(
+        self,
+        tmp_path: Path,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+        task_input: TaskInput,
+    ) -> None:
+        """Engine.run_iter saves raw log files when logging.raw_log=True."""
+        log_dir = tmp_path / "logs"
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=1,
+            logging=LoggingOptions(raw_log=True, raw_log_dir=str(log_dir)),
+        )
+
+        mock_execution_agent.raw_log_collector = None
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        summaries = []
+        async for summary in engine.run_iter(task_input):
+            summaries.append(summary)
+
+        assert len(summaries) == 1
+        assert log_dir.exists()
+        log_files = list(log_dir.glob("iteration-*.jsonl"))
+        assert len(log_files) == 1
+        assert log_files[0].name == "iteration-1.jsonl"
+
+    async def test_run_iter_raw_log_content_passed_to_summary_agent(
+        self,
+        tmp_path: Path,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+        task_input: TaskInput,
+    ) -> None:
+        """Engine.run_iter passes raw_log_content to SummaryAgent."""
+        log_dir = tmp_path / "logs"
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=1,
+            logging=LoggingOptions(raw_log=True, raw_log_dir=str(log_dir)),
+        )
+
+        mock_execution_agent.raw_log_collector = None
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        async for _ in engine.run_iter(task_input):
+            pass
+
+        mock_summary_agent.run.assert_called_once()
+        call_args = mock_summary_agent.run.call_args
+        assert "raw_log_content" in call_args.kwargs

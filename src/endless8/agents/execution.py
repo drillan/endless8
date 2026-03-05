@@ -8,6 +8,7 @@ The Execution Agent is responsible for:
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from pydantic_ai import Agent
@@ -20,6 +21,8 @@ from endless8.raw_log import RawLogCollector
 if TYPE_CHECKING:
     from claude_agent_sdk.types import Message
     from claudecode_model import MessageCallbackType
+
+logger = logging.getLogger(__name__)
 
 EXECUTION_SYSTEM_PROMPT = """あなたはタスク実行エージェントです。
 
@@ -105,7 +108,12 @@ class ExecutionAgent:
         original = self._message_callback
 
         def composed(message: Message) -> None:
-            collector.on_message(message)
+            try:
+                collector.on_message(message)
+            except Exception:
+                logger.warning(
+                    "Raw log collector failed to process message", exc_info=True
+                )
             if original is not None:
                 original(message)
 

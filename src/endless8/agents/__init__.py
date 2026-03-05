@@ -19,6 +19,7 @@ from endless8.models import (
     JudgmentResult,
     Knowledge,
 )
+from endless8.raw_log import RawLogCollector
 
 
 class ExecutionContext(BaseModel):
@@ -76,6 +77,14 @@ class ExecutionAgentProtocol(Protocol):
     - 履歴を参照して過去の失敗を回避
     - セマンティックメタデータの報告
     """
+
+    @property
+    def raw_log_collector(self) -> RawLogCollector | None:
+        """Optional raw log collector for capturing stream output."""
+        ...
+
+    @raw_log_collector.setter
+    def raw_log_collector(self, collector: RawLogCollector | None) -> None: ...
 
     async def run(self, context: ExecutionContext) -> ExecutionResult:
         """タスクを実行する。
