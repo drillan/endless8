@@ -1,5 +1,6 @@
 """Configuration models for endless8."""
 
+import os
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -65,6 +66,10 @@ class EngineConfig(BaseModel):
 
     task: str = Field(..., description="タスクの説明")
     criteria: list[CriterionInput] = Field(..., min_length=1, description="完了条件")
+    working_directory: str = Field(
+        default_factory=os.getcwd,
+        description="コマンド条件の作業ディレクトリ",
+    )
     command_timeout: float = Field(
         default=DEFAULT_COMMAND_TIMEOUT_SEC,
         gt=0,

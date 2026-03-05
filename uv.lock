@@ -362,8 +362,8 @@ dependencies = [
 
 [[package]]
 name = "claudecode-model"
-version = "0.0.39"
-source = { git = "https://github.com/drillan/claudecode-model.git#36b954036be5aad2846ec0a60f703c4612e4a8f3" }
+version = "0.0.40"
+source = { git = "https://github.com/drillan/claudecode-model.git#e1f01bfbfb138ea026440f653c484253d93b079d" }
 dependencies = [
     { name = "claude-agent-sdk" },
     { name = "dacite" },

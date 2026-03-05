@@ -1,11 +1,17 @@
 """Integration tests for clarification flow (User Story 2)."""
 
+import os
+
 import pytest
 
 from endless8.agents.intake import IntakeAgent
 from endless8.models import IntakeStatus
 
 
+@pytest.mark.skipif(
+    os.environ.get("CLAUDECODE") is not None,
+    reason="Cannot run inside Claude Code environment",
+)
 class TestClarificationFlow:
     """Tests for clarification flow when task has ambiguous criteria."""
 
@@ -80,6 +86,10 @@ class TestClarificationFlow:
         assert result.status == IntakeStatus.NEEDS_CLARIFICATION
 
 
+@pytest.mark.skipif(
+    os.environ.get("CLAUDECODE") is not None,
+    reason="Cannot run inside Claude Code environment",
+)
 class TestRejectedTasks:
     """Tests for task rejection scenarios."""
 

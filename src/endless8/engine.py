@@ -9,10 +9,8 @@ The Engine coordinates the 4 agents:
 
 import asyncio
 import logging
-import os
 import traceback
 from collections.abc import AsyncIterator, Awaitable, Callable
-from pathlib import Path
 from typing import Protocol
 
 from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
@@ -291,13 +289,7 @@ class Engine:
         """
         criteria = task_input.criteria
 
-        # Resolve working directory for command execution (FR-014)
-        if self._history_store:
-            cwd = str(self._history_store.path.parent)
-        elif self._config.persist:
-            cwd = str(Path(self._config.persist).parent)
-        else:
-            cwd = os.getcwd()
+        cwd = self._config.working_directory
 
         # Step 1: Run command criteria
         (

@@ -1,5 +1,6 @@
 """Integration tests for research tasks (User Story 6)."""
 
+import os
 from datetime import datetime
 
 import pytest
@@ -14,6 +15,10 @@ from endless8.models import (
 )
 
 
+@pytest.mark.skipif(
+    os.environ.get("CLAUDECODE") is not None,
+    reason="Cannot run inside Claude Code environment",
+)
 class TestResearchTaskIntake:
     """Tests for research task intake handling."""
 
