@@ -11,6 +11,7 @@ import asyncio
 import logging
 import traceback
 from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Protocol
 
 from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
@@ -35,6 +36,7 @@ from endless8.models import (
     TaskInput,
     criteria_to_str_list,
 )
+from endless8.raw_log import RawLogCollector
 
 # Progress callback type
 ProgressCallback = (
@@ -52,6 +54,12 @@ class IntakeAgentProtocol(Protocol):
 
 class ExecutionAgentProtocol(Protocol):
     """Protocol for execution agent."""
+
+    @property
+    def raw_log_collector(self) -> RawLogCollector | None: ...
+
+    @raw_log_collector.setter
+    def raw_log_collector(self, collector: RawLogCollector | None) -> None: ...
 
     async def run(self, context: ExecutionContext) -> ExecutionResult: ...
 
@@ -157,6 +165,10 @@ class Engine:
     def _should_track_raw_output(self) -> bool:
         return self._config.raw_output_context >= 1
 
+    @property
+    def _should_save_raw_log(self) -> bool:
+        return self._config.logging.raw_log
+
     def _save_output_md(self, output: str) -> None:
         """Save execution output to output.md."""
         if not self._history_store:
@@ -169,6 +181,68 @@ class Engine:
                 "Failed to write output.md; raw_output_context will not be available on resume",
                 exc_info=True,
             )
+
+    def _save_raw_log(self, iteration: int, content: str) -> None:
+        """Save raw log content to file.
+
+        Args:
+            iteration: Current iteration number.
+            content: JSONL content to save.
+        """
+        raw_log_dir = Path(self._config.logging.raw_log_dir)
+        try:
+            raw_log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = raw_log_dir / f"iteration-{iteration}.jsonl"
+            log_path.write_text(content, encoding="utf-8")
+            logger.info("Raw log saved: %s", log_path)
+        except OSError:
+            logger.warning(
+                "Failed to write raw log for iteration %d",
+                iteration,
+                exc_info=True,
+            )
+
+    def _setup_raw_log_collector(self) -> RawLogCollector | None:
+        """Set up raw log collector on execution agent if raw logging is enabled.
+
+        Returns:
+            RawLogCollector if set up, None otherwise.
+        """
+        if not self._should_save_raw_log:
+            return None
+        if self._execution_agent is None:
+            return None
+
+        collector = RawLogCollector()
+        self._execution_agent.raw_log_collector = collector
+        return collector
+
+    def _teardown_raw_log_collector(self) -> None:
+        """Remove raw log collector from execution agent."""
+        if self._execution_agent is not None:
+            self._execution_agent.raw_log_collector = None
+
+    def _collect_and_save_raw_log(
+        self, raw_log_collector: RawLogCollector | None, iteration: int
+    ) -> str | None:
+        """Collect raw log content, save to file, and clean up collector.
+
+        Args:
+            raw_log_collector: The collector instance, or None if not active.
+            iteration: Current iteration number.
+
+        Returns:
+            Raw log content string if collected, None otherwise.
+        """
+        if raw_log_collector is None:
+            return None
+        try:
+            raw_log_content = raw_log_collector.get_content() or None
+            self._save_raw_log(iteration, raw_log_content or "")
+            raw_log_collector.clear()
+            return raw_log_content
+        finally:
+            self._teardown_raw_log_collector()
 
     async def _run_command_criteria(
         self,
@@ -579,28 +653,37 @@ class Engine:
                 )
 
                 # Execute
-                if self._execution_agent:
-                    execution_result = await self._execution_agent.run(context)
-                    await self._emit_progress(
-                        on_progress,
-                        ProgressEventType.EXECUTION_COMPLETE,
-                        f"実行完了: {execution_result.status.value}",
-                        iteration=iteration,
-                        data={"status": execution_result.status.value},
+                raw_log_collector = self._setup_raw_log_collector()
+                try:
+                    if self._execution_agent:
+                        execution_result = await self._execution_agent.run(context)
+                        await self._emit_progress(
+                            on_progress,
+                            ProgressEventType.EXECUTION_COMPLETE,
+                            f"実行完了: {execution_result.status.value}",
+                            iteration=iteration,
+                            data={"status": execution_result.status.value},
+                        )
+
+                        self._save_output_md(execution_result.output)
+
+                        # Update previous output for next iteration
+                        if self._should_track_raw_output:
+                            self._previous_output = execution_result.output
+                    else:
+                        raise RuntimeError("Execution agent not configured")
+                finally:
+                    raw_log_content = self._collect_and_save_raw_log(
+                        raw_log_collector, iteration
                     )
-
-                    self._save_output_md(execution_result.output)
-
-                    # Update previous output for next iteration
-                    if self._should_track_raw_output:
-                        self._previous_output = execution_result.output
-                else:
-                    raise RuntimeError("Execution agent not configured")
 
                 # Summarize
                 if self._summary_agent:
                     summary, knowledge_list = await self._summary_agent.run(
-                        execution_result, iteration, criteria_str
+                        execution_result,
+                        iteration,
+                        criteria_str,
+                        raw_log_content=raw_log_content,
                     )
                     self._history.append(summary)
                     self._knowledge.extend(knowledge_list)
@@ -752,21 +835,30 @@ class Engine:
                 )
 
                 # Execute
-                if self._execution_agent:
-                    execution_result = await self._execution_agent.run(context)
+                raw_log_collector = self._setup_raw_log_collector()
+                try:
+                    if self._execution_agent:
+                        execution_result = await self._execution_agent.run(context)
 
-                    self._save_output_md(execution_result.output)
+                        self._save_output_md(execution_result.output)
 
-                    # Update previous output for next iteration
-                    if self._should_track_raw_output:
-                        self._previous_output = execution_result.output
-                else:
-                    raise RuntimeError("Execution agent not configured")
+                        # Update previous output for next iteration
+                        if self._should_track_raw_output:
+                            self._previous_output = execution_result.output
+                    else:
+                        raise RuntimeError("Execution agent not configured")
+                finally:
+                    raw_log_content = self._collect_and_save_raw_log(
+                        raw_log_collector, iteration
+                    )
 
                 # Summarize
                 if self._summary_agent:
                     summary, knowledge_list = await self._summary_agent.run(
-                        execution_result, iteration, criteria_str
+                        execution_result,
+                        iteration,
+                        criteria_str,
+                        raw_log_content=raw_log_content,
                     )
                     self._history.append(summary)
                     self._knowledge.extend(knowledge_list)

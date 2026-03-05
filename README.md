@@ -141,6 +141,26 @@ criteria:
 - stdout/stderr は各 10KB まで記録（根拠記録用）
 - デフォルトタイムアウト: 30 秒（`command_timeout` で変更可能）
 
+### 生ログ保存（logging.raw_log）
+
+`logging.raw_log: true` を設定すると、各イテレーションの実行エージェントの stream-json 出力を JSONL ファイルとして保存します。保存された生ログから `SummaryAgent` がメタデータ（使用ツール、変更ファイル、トークン数）を自動抽出します。
+
+```yaml
+task: "認証機能を実装する"
+criteria:
+  - "テストがパスする"
+logging:
+  raw_log: true
+  raw_log_dir: ".e8/logs"  # デフォルト
+```
+
+| 設定 | 説明 | デフォルト |
+|------|------|-----------|
+| `logging.raw_log` | 生ログの保存を有効化 | `false` |
+| `logging.raw_log_dir` | 保存先ディレクトリ | `.e8/logs` |
+
+保存されるファイル: `<raw_log_dir>/iteration-<N>.jsonl`
+
 ### 生出力参照（raw_output_context）
 
 `raw_output_context: 1` を設定すると、直前イテレーションの実行エージェントの生出力を次のイテレーションに渡します。サマリ化では失われる詳細情報を保持したい場合に有効です。

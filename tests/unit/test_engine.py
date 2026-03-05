@@ -1014,6 +1014,7 @@ class TestOutputMdSaving:
             _result: ExecutionResult,
             iteration: int,
             _criteria: list[str],
+            **_kwargs: object,
         ) -> tuple[ExecutionSummary, list[Knowledge]]:
             return (
                 ExecutionSummary(
