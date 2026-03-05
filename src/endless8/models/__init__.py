@@ -1,8 +1,15 @@
 """Data models for endless8."""
 
+from endless8.models.criteria import (
+    CommandCriterion,
+    CriterionInput,
+    CriterionType,
+    _criterion_discriminator,
+)
 from endless8.models.knowledge import Knowledge, KnowledgeConfidence, KnowledgeType
 from endless8.models.progress import ProgressEvent, ProgressEventType
 from endless8.models.results import (
+    CommandResult,
     CriteriaEvaluation,
     ExecutionResult,
     ExecutionStatus,
@@ -25,12 +32,18 @@ from endless8.models.task import TaskInput
 __all__ = [
     # Task
     "TaskInput",
+    # Criteria
+    "CriterionType",
+    "CommandCriterion",
+    "CriterionInput",
+    "_criterion_discriminator",
     # Results
     "IntakeStatus",
     "IntakeResult",
     "ExecutionStatus",
     "ExecutionResult",
     "SemanticMetadata",
+    "CommandResult",
     "CriteriaEvaluation",
     "JudgmentResult",
     "LoopStatus",

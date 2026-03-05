@@ -4,6 +4,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+DEFAULT_COMMAND_TIMEOUT_SEC: float = 30.0
+"""コマンド条件のデフォルトタイムアウト（秒）。"""
+
+COMMAND_OUTPUT_MAX_BYTES: int = 10 * 1024
+"""コマンド出力の最大バイト数（10KB）。"""
+
 
 class MaxTurnsConfig(BaseModel):
     """エージェントごとの max_turns 設定。"""
@@ -57,6 +63,11 @@ class EngineConfig(BaseModel):
 
     task: str = Field(..., description="タスクの説明")
     criteria: list[str] = Field(..., min_length=1, description="完了条件")
+    command_timeout: float = Field(
+        default=DEFAULT_COMMAND_TIMEOUT_SEC,
+        gt=0,
+        description="コマンド条件のタイムアウト（秒）",
+    )
     agent_model: str = Field(
         default="anthropic:claude-sonnet-4-5",
         description="エージェントが使用するモデル",

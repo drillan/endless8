@@ -1,12 +1,14 @@
 """Result models for endless8."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
+from endless8.models.criteria import CriterionType
 
-class IntakeStatus(str, Enum):
+
+class IntakeStatus(StrEnum):
     """受付ステータス。"""
 
     ACCEPTED = "accepted"
@@ -14,7 +16,7 @@ class IntakeStatus(str, Enum):
     REJECTED = "rejected"
 
 
-class ExecutionStatus(str, Enum):
+class ExecutionStatus(StrEnum):
     """実行ステータス。"""
 
     SUCCESS = "success"
@@ -22,7 +24,7 @@ class ExecutionStatus(str, Enum):
     ERROR = "error"
 
 
-class LoopStatus(str, Enum):
+class LoopStatus(StrEnum):
     """ループ終了ステータス。"""
 
     COMPLETED = "completed"
@@ -71,6 +73,15 @@ class ExecutionResult(BaseModel):
     raw_log_path: str | None = Field(None, description="生ログファイルのパス")
 
 
+class CommandResult(BaseModel):
+    """コマンド条件の実行結果。"""
+
+    exit_code: int = Field(..., description="終了コード")
+    stdout: str = Field(default="", description="標準出力（最大 10KB）")
+    stderr: str = Field(default="", description="標準エラー出力（最大 10KB）")
+    execution_time_sec: float = Field(..., ge=0.0, description="実行時間（秒）")
+
+
 class CriteriaEvaluation(BaseModel):
     """各完了条件の評価。"""
 
@@ -78,6 +89,30 @@ class CriteriaEvaluation(BaseModel):
     is_met: bool = Field(..., description="条件を満たしているか")
     evidence: str = Field(..., description="判定の根拠")
     confidence: float = Field(..., ge=0.0, le=1.0, description="判定の確信度")
+    evaluation_method: CriterionType = Field(
+        default=CriterionType.SEMANTIC, description="判定方式（FR-013）"
+    )
+    command_result: CommandResult | None = Field(
+        None, description="コマンド実行結果（command 型のみ）"
+    )
+
+    @model_validator(mode="after")
+    def validate_evaluation_consistency(self) -> Self:
+        """Validate cross-field invariants.
+
+        - evaluation_method == 'command' -> confidence == 1.0 (FR-011)
+        - evaluation_method == 'command' -> command_result is not None
+        - evaluation_method == 'semantic' -> command_result is None
+        """
+        if self.evaluation_method == CriterionType.COMMAND:
+            if self.confidence != 1.0:
+                raise ValueError("Command evaluation confidence must be 1.0 (FR-011)")
+            if self.command_result is None:
+                raise ValueError("command_result is required for command evaluation")
+        elif self.evaluation_method == CriterionType.SEMANTIC:
+            if self.command_result is not None:
+                raise ValueError("command_result must be None for semantic evaluation")
+        return self
 
 
 class JudgmentResult(BaseModel):

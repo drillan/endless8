@@ -12,6 +12,7 @@ from typing import Protocol
 from pydantic import BaseModel, Field
 
 from endless8.models import (
+    CommandResult,
     ExecutionResult,
     ExecutionSummary,
     IntakeResult,
@@ -116,6 +117,21 @@ class SummaryAgentProtocol(Protocol):
         ...
 
 
+class CommandCriterionResult(BaseModel):
+    """コマンド条件の判定結果（Engine 内部用）。
+
+    JudgmentContext に渡して LLM 判定のコンテキストとして使用。
+    """
+
+    criterion_index: int = Field(
+        ..., ge=0, description="criteria リスト内のインデックス"
+    )
+    description: str = Field(..., description="条件の表示名")
+    command: str = Field(..., description="実行したコマンド")
+    is_met: bool = Field(..., description="終了コード 0 = True")
+    result: CommandResult = Field(..., description="実行結果")
+
+
 class JudgmentAgentProtocol(Protocol):
     """判定エージェントのインターフェース。
 
@@ -138,6 +154,7 @@ class JudgmentAgentProtocol(Protocol):
 
 
 __all__ = [
+    "CommandCriterionResult",
     "ExecutionContext",
     "JudgmentContext",
     "IntakeAgentProtocol",

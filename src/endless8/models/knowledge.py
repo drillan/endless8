@@ -1,12 +1,12 @@
 """Knowledge models for endless8."""
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class KnowledgeType(str, Enum):
+class KnowledgeType(StrEnum):
     """ナレッジタイプ。"""
 
     DISCOVERY = "discovery"  # コードベースの事実
@@ -16,7 +16,7 @@ class KnowledgeType(str, Enum):
     CODEBASE = "codebase"  # 構造的な知見
 
 
-class KnowledgeConfidence(str, Enum):
+class KnowledgeConfidence(StrEnum):
     """信頼度。"""
 
     HIGH = "high"
