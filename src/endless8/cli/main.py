@@ -6,7 +6,7 @@ Provides command-line interface for running tasks.
 import asyncio
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, cast
 
 import typer
 
@@ -22,7 +22,7 @@ from endless8.config import EngineConfig, load_config
 from endless8.engine import Engine
 from endless8.history import History, KnowledgeBase
 from endless8.models import LoopStatus, ProgressEvent, ProgressEventType, TaskInput
-from endless8.models.criteria import CriterionInput
+from endless8.models.criteria import CriterionInput, criteria_to_str_list
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def run(
         if task:
             engine_config.task = task
         if criteria:
-            engine_config.criteria = list(criteria)
+            engine_config.criteria = cast(list[CriterionInput], list(criteria))
         if max_iterations is not None:
             engine_config.max_iterations = max_iterations
         if command_timeout is not None:
@@ -160,14 +160,13 @@ def run(
             max_iterations = 10
 
         # Create engine config
-        config_kwargs: dict[str, object] = {
-            "task": task,
-            "criteria": criteria,
-            "max_iterations": max_iterations,
-        }
+        engine_config = EngineConfig(
+            task=task,
+            criteria=criteria,
+            max_iterations=max_iterations,
+        )
         if command_timeout is not None:
-            config_kwargs["command_timeout"] = command_timeout
-        engine_config = EngineConfig(**config_kwargs)
+            engine_config.command_timeout = command_timeout
         config_criteria = engine_config.criteria
 
     # Ensure .e8 directory exists
@@ -211,11 +210,7 @@ def run(
         typer.echo(f"タスクID: {task_id}")
 
     typer.echo(f"タスク: {task}")
-    criteria_display = ", ".join(
-        c if isinstance(c, str) else (c.description or c.command)
-        for c in config_criteria
-    )
-    typer.echo(f"完了条件: {criteria_display}")
+    typer.echo(f"完了条件: {', '.join(criteria_to_str_list(config_criteria))}")
     typer.echo(f"最大イテレーション: {max_iterations}")
     typer.echo("")
 

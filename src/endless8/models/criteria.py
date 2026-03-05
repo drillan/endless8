@@ -66,3 +66,15 @@ CriterionInput = Annotated[
 str -> 意味的条件（LLM 判定）
 CommandCriterion -> コマンド条件（終了コード判定）
 """
+
+
+def criteria_to_str_list(criteria: list[CriterionInput]) -> list[str]:
+    """Convert CriterionInput list to str list for display/agent interfaces.
+
+    Args:
+        criteria: list of CriterionInput (str | CommandCriterion)
+
+    Returns:
+        list of str representations for each criterion
+    """
+    return [c if isinstance(c, str) else (c.description or c.command) for c in criteria]

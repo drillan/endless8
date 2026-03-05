@@ -35,20 +35,8 @@ from endless8.models import (
     ProgressEvent,
     ProgressEventType,
     TaskInput,
+    criteria_to_str_list,
 )
-
-
-def _criteria_to_str_list(criteria: list[CriterionInput]) -> list[str]:
-    """Convert CriterionInput list to str list for agent interfaces.
-
-    Args:
-        criteria: list of CriterionInput (str | CommandCriterion)
-
-    Returns:
-        list of str representations for each criterion
-    """
-    return [c if isinstance(c, str) else (c.description or c.command) for c in criteria]
-
 
 # Progress callback type
 ProgressCallback = (
@@ -465,7 +453,7 @@ class Engine:
                 await self._initialize_from_history()
 
             # Run intake validation
-            criteria_str = _criteria_to_str_list(task_input.criteria)
+            criteria_str = criteria_to_str_list(task_input.criteria)
 
             # Emit task start event
             start_msg = (
@@ -741,7 +729,7 @@ class Engine:
 
         try:
             # Run intake validation
-            criteria_str = _criteria_to_str_list(task_input.criteria)
+            criteria_str = criteria_to_str_list(task_input.criteria)
             if self._intake_agent:
                 intake_result = await self._intake_agent.run(
                     task_input.task, criteria_str
