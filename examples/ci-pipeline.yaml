@@ -1,0 +1,40 @@
+# CI パイプラインタスクの設定ファイル例（コマンド条件のみ）
+# 使用方法: e8 run --config examples/ci-pipeline.yaml
+#
+# このタスクは「コマンド条件のみ」パターンの例です。
+# すべての完了条件がコマンド型のため、LLM による判定は省略されます（FR-010）。
+# 判定は各コマンドの終了コード（0 = met, 非ゼロ = not met）のみで行われます。
+#
+# 注意: この設定ファイルを使用するには Issue #30 の修正が必要です。
+
+task: "CI パイプラインが通るようにコードを修正する"
+criteria:
+  - type: command
+    command: "uv run ruff check ."
+    description: "リンターがエラーなしでパス"
+  - type: command
+    command: "uv run ruff format --check ."
+    description: "コードフォーマットが統一されている"
+  - type: command
+    command: "uv run mypy ."
+    description: "型チェックがパス"
+  - type: command
+    command: "uv run pytest --tb=short -q"
+    description: "全テストがパス"
+    timeout: 120  # テスト実行は時間がかかるため個別タイムアウトを設定
+
+max_iterations: 10
+
+# コマンド条件のデフォルトタイムアウト（秒）
+# 各コマンドに個別の timeout が指定されていない場合にこの値が使われる
+command_timeout: 60
+
+claude_options:
+  timeout: 600.0
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Read"
+    - "Write"

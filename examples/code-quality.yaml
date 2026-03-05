@@ -1,0 +1,56 @@
+# コード品質改善タスクの設定ファイル例（意味的条件 + コマンド条件の混在）
+# 使用方法: e8 run --config examples/code-quality.yaml
+#
+# このタスクは「混在条件」パターンの例です。
+# コマンド条件はシェルコマンドの終了コードで判定され、
+# 意味的条件は LLM が判定します。
+# LLM はコマンド実行結果もコンテキストとして参照し、判定品質を向上させます。
+#
+# 注意: この設定ファイルを使用するには Issue #30 の修正が必要です。
+
+task: "utils.py モジュールのコード品質を改善する"
+criteria:
+  # 意味的条件（LLM が判定）
+  - "関数ごとに適切な docstring が記述されている"
+  - "エラーハンドリングが適切で、例外が明示的に処理されている"
+  # コマンド条件（終了コードで判定）
+  - type: command
+    command: "uv run pytest tests/test_utils.py -v"
+    description: "ユニットテストが全パス"
+    timeout: 90
+  - type: command
+    command: "uv run mypy src/utils.py --strict"
+    description: "strict モードの型チェックがパス"
+
+max_iterations: 15
+command_timeout: 30
+
+# 生出力参照: テスト結果や mypy のエラー詳細を次のイテレーションに渡す
+raw_output_context: 1
+
+# 意味的条件の判定を厳密に
+prompts:
+  judgment: |
+    以下の基準で完了条件を厳密に評価してください：
+
+    【docstring の品質】
+    - Google スタイルまたは NumPy スタイルで統一されているか
+    - Args, Returns, Raises セクションが必要に応じて記述されているか
+    - 説明が具体的か（「処理する」のような曖昧な記述は不可）
+
+    【エラーハンドリング】
+    - bare except（`except:` や `except Exception:`）を使用していないか
+    - 各 except ブロックで具体的な例外型をキャッチしているか
+    - エラーメッセージが具体的で、デバッグに有用な情報を含むか
+
+    コマンド条件の結果も参考にしてください。テストがパスしていても
+    コード品質の基準は別途判定する必要があります。
+
+claude_options:
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Read"
+    - "Write"
