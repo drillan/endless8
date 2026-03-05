@@ -62,7 +62,7 @@ src/endless8/
 │   ├── results.py       # [MODIFY] CriteriaEvaluation に evaluation_method, command_result を追加
 │   └── criteria.py      # [NEW] Criterion 型定義（CommandCriterion, CriterionInput, CriterionType）
 ├── agents/
-│   ├── __init__.py      # [MODIFY] JudgmentContext に command_results 追加、ExecutionContext.criteria 型変更、IntakeAgentProtocol/SummaryAgentProtocol の criteria 引数に変換ロジック対応
+│   ├── __init__.py      # [MODIFY] JudgmentContext に command_results 追加、CommandCriterionResult モデル追加（既存エージェント Protocol は list[str] を維持、Engine 側で変換）
 │   └── judgment.py      # [MODIFY] コマンド結果をプロンプトに含める
 ├── engine.py            # [MODIFY] 判定フェーズにコマンド実行ステップを挿入、criteria を list[str] に変換して各エージェントに渡すロジック追加
 ├── command/
