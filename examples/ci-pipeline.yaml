@@ -37,3 +37,6 @@ claude_options:
     - "Grep"
     - "Read"
     - "Write"
+
+logging:
+  raw_log: true

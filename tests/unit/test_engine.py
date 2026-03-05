@@ -2077,6 +2077,156 @@ class TestRunCommandCriteria:
         assert "stderr: warning" in evidence
 
 
+class TestCommandCwd:
+    """Tests for command criteria working directory resolution (Issue #32)."""
+
+    @pytest.fixture
+    def mock_intake_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_execution_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_summary_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="テスト",
+                result=ExecutionStatus.SUCCESS,
+                reason="完了",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-01T00:00:00Z",
+            ),
+            [],
+        )
+        return agent
+
+    async def test_command_uses_config_working_directory(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Command criteria use config.working_directory, not history_store path."""
+        from endless8.command.executor import CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.history import History
+
+        captured_cwd: list[str] = []
+
+        async def mock_execute(
+            _command: str, cwd: str, _timeout: float
+        ) -> CommandResult:
+            captured_cwd.append(cwd)
+            return CommandResult(
+                exit_code=0, stdout="ok", stderr="", execution_time_sec=0.1
+            )
+
+        explicit_wd = "/tmp/my-project"
+        config = EngineConfig(
+            task="テスト",
+            criteria=["dummy"],
+            max_iterations=1,
+            working_directory=explicit_wd,
+        )
+
+        history = AsyncMock(spec=History)
+        history.path = Path("/some/.e8/tasks/12345/history.jsonl")
+        history.get_context_string = AsyncMock(return_value="履歴なし")
+        history.append = AsyncMock()
+        history.append_judgment = AsyncMock()
+        history.append_final_result = AsyncMock()
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            history=history,
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                CommandCriterion(type="command", command="true", description="テスト"),
+            ],
+            max_iterations=1,
+        )
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            await engine.run(task_input)
+
+        assert len(captured_cwd) == 1
+        assert captured_cwd[0] == explicit_wd
+
+    async def test_command_uses_cwd_when_working_directory_not_set(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Without explicit working_directory, os.getcwd() is used at config time."""
+        import os
+
+        from endless8.command.executor import CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        captured_cwd: list[str] = []
+
+        async def mock_execute(
+            _command: str, cwd: str, _timeout: float
+        ) -> CommandResult:
+            captured_cwd.append(cwd)
+            return CommandResult(
+                exit_code=0, stdout="ok", stderr="", execution_time_sec=0.1
+            )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["dummy"],
+            max_iterations=1,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                CommandCriterion(type="command", command="true", description="テスト"),
+            ],
+            max_iterations=1,
+        )
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            await engine.run(task_input)
+
+        assert len(captured_cwd) == 1
+        assert captured_cwd[0] == os.getcwd()
+
+
 class TestCommandExecutionErrorStopsLoop:
     """T017 [US3]: Engine loop stops on CommandExecutionError."""
 

@@ -127,6 +127,9 @@ def run(
             typer.echo(f"エラー: 設定ファイルが不正です: {e}", err=True)
             raise typer.Exit(1) from None
 
+        # Set working directory from --project
+        engine_config.working_directory = str(project.resolve())
+
         # CLI options override config file
         if task:
             engine_config.task = task
@@ -164,6 +167,7 @@ def run(
             task=task,
             criteria=criteria,
             max_iterations=max_iterations,
+            working_directory=str(project.resolve()),
         )
         if command_timeout is not None:
             engine_config.command_timeout = command_timeout

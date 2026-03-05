@@ -491,7 +491,7 @@ class TestErrorScenarios:
         config = EngineConfig(
             task="テスト",
             criteria=["条件"],
-            persist="/nonexistent_path_xyz_12345/history.jsonl",
+            working_directory="/nonexistent_path_xyz_12345",
         )
         engine = Engine(
             config=config,
