@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from endless8.models.criteria import CriterionInput
+
 DEFAULT_COMMAND_TIMEOUT_SEC: float = 30.0
 """コマンド条件のデフォルトタイムアウト（秒）。"""
 
@@ -62,7 +64,7 @@ class EngineConfig(BaseModel):
     """エンジン設定。"""
 
     task: str = Field(..., description="タスクの説明")
-    criteria: list[str] = Field(..., min_length=1, description="完了条件")
+    criteria: list[CriterionInput] = Field(..., min_length=1, description="完了条件")
     command_timeout: float = Field(
         default=DEFAULT_COMMAND_TIMEOUT_SEC,
         gt=0,

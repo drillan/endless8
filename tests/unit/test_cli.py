@@ -867,6 +867,167 @@ class TestConfigFileOverride:
         assert "不正" in result.output or "エラー" in result.output
 
 
+class TestCommandTimeoutOption:
+    """Tests for CLI --command-timeout option."""
+
+    def _create_completed_result(self, iterations: int = 1) -> LoopResult:
+        """Create a completed LoopResult with proper final_judgment."""
+        judgment = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="条件を満たしている",
+                    confidence=1.0,
+                )
+            ],
+            overall_reason="タスク完了",
+        )
+        return LoopResult(
+            status=LoopStatus.COMPLETED,
+            iterations_used=iterations,
+            final_judgment=judgment,
+        )
+
+    def test_command_timeout_option_accepted(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that --command-timeout option is accepted by CLI."""
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--command-timeout",
+                    "60",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+
+    def test_command_timeout_passed_to_engine_config(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that --command-timeout value is passed to EngineConfig."""
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--command-timeout",
+                    "45",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            # Check EngineConfig was created with correct command_timeout
+            call_kwargs = mock_engine_class.call_args[1]
+            config = call_kwargs["config"]
+            assert config.command_timeout == 45.0
+
+    def test_command_timeout_overrides_config_file(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that CLI --command-timeout overrides config file value."""
+        import yaml
+
+        config_file = temp_dir / "config.yaml"
+        config_data = {
+            "task": "テスト",
+            "criteria": ["条件"],
+            "command_timeout": 30,
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--command-timeout",
+                    "120",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            call_kwargs = mock_engine_class.call_args[1]
+            config = call_kwargs["config"]
+            assert config.command_timeout == 120.0
+
+    def test_config_file_with_command_criteria_displays_correctly(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that config file with command criteria displays without error."""
+        import yaml
+
+        config_file = temp_dir / "config.yaml"
+        config_data = {
+            "task": "CI修正",
+            "criteria": [
+                "コードが読みやすい",
+                {"type": "command", "command": "pytest", "description": "テストパス"},
+            ],
+        }
+        config_file.write_text(yaml.dump(config_data, allow_unicode=True))
+
+        mock_result = self._create_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "CI修正" in result.output
+            # Check criteria display includes both types
+            assert "コードが読みやすい" in result.output
+            assert "テストパス" in result.output
+
+
 class TestProgressCallbackEvents:
     """Tests for progress_callback event handling."""
 

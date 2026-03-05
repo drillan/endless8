@@ -22,6 +22,7 @@ from endless8.config import EngineConfig, load_config
 from endless8.engine import Engine
 from endless8.history import History, KnowledgeBase
 from endless8.models import LoopStatus, ProgressEvent, ProgressEventType, TaskInput
+from endless8.models.criteria import CriterionInput
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +105,12 @@ def run(
     resume: Annotated[
         str | None, typer.Option("--resume", "-r", help="タスクIDを指定して再開")
     ] = None,
+    command_timeout: Annotated[
+        float | None,
+        typer.Option(
+            "--command-timeout", help="コマンド条件のデフォルトタイムアウト秒"
+        ),
+    ] = None,
     verbose: Annotated[
         bool, typer.Option("--verbose", "-V", help="詳細な実行ログを表示")
     ] = False,
@@ -124,13 +131,15 @@ def run(
         if task:
             engine_config.task = task
         if criteria:
-            engine_config.criteria = criteria
+            engine_config.criteria = list(criteria)
         if max_iterations is not None:
             engine_config.max_iterations = max_iterations
+        if command_timeout is not None:
+            engine_config.command_timeout = command_timeout
 
         # Use config values
         task = engine_config.task
-        criteria = engine_config.criteria
+        config_criteria: list[CriterionInput] = engine_config.criteria
         max_iterations = engine_config.max_iterations
     else:
         # No config file - require task and criteria from CLI
@@ -151,11 +160,15 @@ def run(
             max_iterations = 10
 
         # Create engine config
-        engine_config = EngineConfig(
-            task=task,
-            criteria=criteria,
-            max_iterations=max_iterations,
-        )
+        config_kwargs: dict[str, object] = {
+            "task": task,
+            "criteria": criteria,
+            "max_iterations": max_iterations,
+        }
+        if command_timeout is not None:
+            config_kwargs["command_timeout"] = command_timeout
+        engine_config = EngineConfig(**config_kwargs)
+        config_criteria = engine_config.criteria
 
     # Ensure .e8 directory exists
     e8_dir = project / ".e8"
@@ -198,14 +211,18 @@ def run(
         typer.echo(f"タスクID: {task_id}")
 
     typer.echo(f"タスク: {task}")
-    typer.echo(f"完了条件: {', '.join(criteria)}")
+    criteria_display = ", ".join(
+        c if isinstance(c, str) else (c.description or c.command)
+        for c in config_criteria
+    )
+    typer.echo(f"完了条件: {criteria_display}")
     typer.echo(f"最大イテレーション: {max_iterations}")
     typer.echo("")
 
     # Create task input
     task_input = TaskInput(
         task=task,
-        criteria=criteria,
+        criteria=config_criteria,
         max_iterations=max_iterations,
     )
 
