@@ -9,11 +9,14 @@ The Engine coordinates the 4 agents:
 
 import asyncio
 import logging
+import os
 import traceback
 from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Protocol
 
 from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
+from endless8.command.executor import CommandExecutor
 from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
 from endless8.models import (
@@ -200,8 +203,6 @@ class Engine:
         Raises:
             CommandExecutionError: On execution error (FR-009).
         """
-        from endless8.command.executor import CommandExecutor
-
         executor = CommandExecutor()
         command_evaluations: list[CriteriaEvaluation] = []
         command_criterion_results: list[CommandCriterionResult] = []
@@ -302,13 +303,21 @@ class Engine:
         """
         criteria = task_input.criteria
 
+        # Resolve working directory for command execution (FR-014)
+        if self._history_store:
+            cwd = str(self._history_store.path.parent)
+        elif self._config.persist:
+            cwd = str(Path(self._config.persist).parent)
+        else:
+            cwd = os.getcwd()
+
         # Step 1: Run command criteria
         (
             command_evaluations,
             command_criterion_results,
         ) = await self._run_command_criteria(
             criteria,
-            cwd=self._config.persist or ".",
+            cwd=cwd,
             default_timeout=self._config.command_timeout,
         )
 
