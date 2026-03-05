@@ -1,13 +1,16 @@
 """Unit tests for the Engine class."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from endless8.agents import ExecutionContext
 from endless8.models import (
+    CommandCriterion,
+    CommandResult,
     CriteriaEvaluation,
+    CriterionType,
     ExecutionResult,
     ExecutionStatus,
     ExecutionSummary,
@@ -1819,3 +1822,384 @@ class TestRawOutputContext:
 
         ctx2: ExecutionContext = mock_execution_agent.run.call_args_list[1][0][0]
         assert ctx2.raw_output_context is None
+
+
+class TestRunCommandCriteria:
+    """T010 [US1]: Tests for Engine._run_command_criteria."""
+
+    @pytest.fixture
+    def mock_intake_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_execution_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_summary_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="テスト",
+                result=ExecutionStatus.SUCCESS,
+                reason="完了",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-01T00:00:00Z",
+            ),
+            [],
+        )
+        return agent
+
+    async def test_command_criteria_sequential_execution(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Command criteria are executed sequentially, generating CriteriaEvaluations."""
+        from endless8.command.executor import CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        cmd_result_ok = CommandResult(
+            exit_code=0, stdout="pass", stderr="", execution_time_sec=0.1
+        )
+        cmd_result_fail = CommandResult(
+            exit_code=1, stdout="", stderr="fail", execution_time_sec=0.2
+        )
+
+        call_count = 0
+
+        async def mock_execute(
+            command: str, _cwd: str, _timeout: float
+        ) -> CommandResult:
+            nonlocal call_count
+            call_count += 1
+            if command == "test1":
+                return cmd_result_ok
+            return cmd_result_fail
+
+        criteria: list[str | CommandCriterion] = [
+            CommandCriterion(type="command", command="test1", description="Test 1"),
+            CommandCriterion(type="command", command="test2", description="Test 2"),
+        ]
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["dummy"],
+            max_iterations=1,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=None,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=criteria, max_iterations=1)
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            result = await engine.run(task_input)
+
+        # Both commands should have been executed
+        assert call_count == 2
+        # Command-only criteria: no semantic criteria -> should return result without LLM
+        assert result.final_judgment is not None
+        evaluations = result.final_judgment.evaluations
+        assert len(evaluations) == 2
+
+        # First command: exit_code=0 -> met
+        assert evaluations[0].is_met is True
+        assert evaluations[0].evaluation_method == CriterionType.COMMAND
+        assert evaluations[0].confidence == 1.0
+        assert evaluations[0].command_result is not None
+        assert evaluations[0].command_result.exit_code == 0
+
+        # Second command: exit_code=1 -> not met
+        assert evaluations[1].is_met is False
+        assert evaluations[1].evaluation_method == CriterionType.COMMAND
+        assert evaluations[1].command_result is not None
+        assert evaluations[1].command_result.exit_code == 1
+
+    async def test_build_judgment_result_from_commands_all_met(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """FR-010: Command-only criteria skip LLM; all met -> is_complete=True."""
+        from endless8.command.executor import CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        cmd_result = CommandResult(
+            exit_code=0, stdout="ok", stderr="", execution_time_sec=0.1
+        )
+
+        async def mock_execute(
+            _command: str, _cwd: str, _timeout: float
+        ) -> CommandResult:
+            return cmd_result
+
+        mock_judgment_agent = AsyncMock()
+
+        criteria: list[str | CommandCriterion] = [
+            CommandCriterion(type="command", command="test1"),
+        ]
+
+        config = EngineConfig(task="テスト", criteria=["dummy"], max_iterations=1)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=criteria, max_iterations=1)
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.COMPLETED
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is True
+        # LLM judgment should NOT have been called (FR-010)
+        mock_judgment_agent.run.assert_not_called()
+
+    async def test_build_judgment_result_from_commands_not_all_met(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """FR-010: Command-only with failures -> is_complete=False, LLM skipped."""
+        from endless8.command.executor import CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        cmd_result = CommandResult(
+            exit_code=1, stdout="", stderr="fail", execution_time_sec=0.1
+        )
+
+        async def mock_execute(
+            _command: str, _cwd: str, _timeout: float
+        ) -> CommandResult:
+            return cmd_result
+
+        mock_judgment_agent = AsyncMock()
+
+        criteria: list[str | CommandCriterion] = [
+            CommandCriterion(
+                type="command", command="failing_cmd", description="Failing"
+            ),
+        ]
+
+        config = EngineConfig(task="テスト", criteria=["dummy"], max_iterations=1)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=criteria, max_iterations=1)
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.MAX_ITERATIONS
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is False
+        assert result.final_judgment.suggested_next_action is not None
+        # LLM judgment still NOT called
+        mock_judgment_agent.run.assert_not_called()
+
+    async def test_evidence_includes_exit_code_and_output(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Evidence field includes exit_code, stdout, and stderr snippets."""
+        from endless8.command.executor import CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        cmd_result = CommandResult(
+            exit_code=0, stdout="output text", stderr="warning", execution_time_sec=0.1
+        )
+
+        async def mock_execute(
+            _command: str, _cwd: str, _timeout: float
+        ) -> CommandResult:
+            return cmd_result
+
+        criteria: list[str | CommandCriterion] = [
+            CommandCriterion(type="command", command="test"),
+        ]
+
+        config = EngineConfig(task="テスト", criteria=["dummy"], max_iterations=1)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=None,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=criteria, max_iterations=1)
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            result = await engine.run(task_input)
+
+        assert result.final_judgment is not None
+        evidence = result.final_judgment.evaluations[0].evidence
+        assert "exit_code=0" in evidence
+        assert "stdout: output text" in evidence
+        assert "stderr: warning" in evidence
+
+
+class TestCommandExecutionErrorStopsLoop:
+    """T017 [US3]: Engine loop stops on CommandExecutionError."""
+
+    @pytest.fixture
+    def mock_intake_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["条件"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_execution_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="完了",
+            artifacts=[],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_summary_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="テスト",
+                result=ExecutionStatus.SUCCESS,
+                reason="完了",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-01T00:00:00Z",
+            ),
+            [],
+        )
+        return agent
+
+    async def test_command_execution_error_returns_error_status(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """CommandExecutionError stops the loop with LoopStatus.ERROR."""
+        from endless8.command.executor import CommandExecutionError, CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        async def mock_execute(
+            _command: str, _cwd: str, _timeout: float
+        ) -> CommandResult:
+            raise CommandExecutionError("Command failed: timeout")
+
+        criteria: list[str | CommandCriterion] = [
+            CommandCriterion(type="command", command="slow_cmd"),
+        ]
+
+        config = EngineConfig(task="テスト", criteria=["dummy"], max_iterations=3)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=None,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=criteria, max_iterations=3)
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.ERROR
+        assert result.error_message is not None
+        assert "Command failed" in result.error_message
+
+    async def test_first_error_stops_remaining_commands(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """First CommandExecutionError stops execution; remaining commands skipped."""
+        from endless8.command.executor import CommandExecutionError, CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        execute_count = 0
+
+        async def mock_execute(
+            command: str, _cwd: str, _timeout: float
+        ) -> CommandResult:
+            nonlocal execute_count
+            execute_count += 1
+            if command == "cmd1":
+                return CommandResult(
+                    exit_code=0, stdout="ok", stderr="", execution_time_sec=0.1
+                )
+            # cmd2 fails with error
+            raise CommandExecutionError(f"OSError for {command}")
+
+        criteria: list[str | CommandCriterion] = [
+            CommandCriterion(type="command", command="cmd1"),
+            CommandCriterion(type="command", command="cmd2"),
+            CommandCriterion(type="command", command="cmd3"),
+        ]
+
+        config = EngineConfig(task="テスト", criteria=["dummy"], max_iterations=1)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=None,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=criteria, max_iterations=1)
+
+        with patch.object(CommandExecutor, "execute", side_effect=mock_execute):
+            result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.ERROR
+        # cmd1 succeeded, cmd2 raised error, cmd3 should NOT have been executed
+        assert execute_count == 2
