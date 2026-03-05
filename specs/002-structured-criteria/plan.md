@@ -33,7 +33,7 @@
 | Art.6 データ正確性 | PASS | タイムアウト値は設定で管理、エラー時は明示的例外（暗黙的処理なし） |
 | Art.7 DRY 原則 | PASS | 既存の CriteriaEvaluation を拡張（新規バージョン作成しない） |
 | Art.8 リファクタリングポリシー | PASS | 既存モデルを直接修正（V2 クラス作成しない） |
-| Art.9 Python 型安全性 | PASS | 全関数に型注釈、Discriminator による型安全なユニオン |
+| Art.9 Python 型安全性 | PASS | 全関数に型注釈、Discriminator による型安全なユニオン。既存の `(str, Enum)` パターンを `StrEnum` に移行（ruff UP042 準拠） |
 | Art.10 Docstring 標準 | PASS | Google-style docstring を適用 |
 | Art.11 命名規則 | PASS | ブランチ名 `002-structured-criteria` は規則準拠 |
 
@@ -60,11 +60,11 @@ src/endless8/
 ├── models/
 │   ├── task.py          # [MODIFY] TaskInput.criteria を判別化ユニオンに拡張
 │   ├── results.py       # [MODIFY] CriteriaEvaluation に evaluation_method, command_result を追加
-│   └── criteria.py      # [NEW] Criterion 型定義（SemanticCriterion, CommandCriterion, CriterionType）
+│   └── criteria.py      # [NEW] Criterion 型定義（CommandCriterion, CriterionInput, CriterionType）
 ├── agents/
-│   ├── __init__.py      # [MODIFY] JudgmentContext に command_results フィールドを追加
+│   ├── __init__.py      # [MODIFY] JudgmentContext に command_results 追加、ExecutionContext.criteria 型変更、IntakeAgentProtocol/SummaryAgentProtocol の criteria 引数に変換ロジック対応
 │   └── judgment.py      # [MODIFY] コマンド結果をプロンプトに含める
-├── engine.py            # [MODIFY] 判定フェーズにコマンド実行ステップを挿入
+├── engine.py            # [MODIFY] 判定フェーズにコマンド実行ステップを挿入、criteria を list[str] に変換して各エージェントに渡すロジック追加
 ├── command/
 │   ├── __init__.py      # [NEW]
 │   └── executor.py      # [NEW] CommandExecutor（asyncio subprocess）
@@ -82,6 +82,12 @@ tests/
 ```
 
 **Structure Decision**: 既存の single project 構造を維持。新規ファイルは `src/endless8/models/criteria.py`（型定義）と `src/endless8/command/executor.py`（コマンド実行）の 2 ファイルのみ。
+
+**Criteria 変換方針**: `TaskInput.criteria` は `list[CriterionInput]`（str | CommandCriterion の混在リスト）だが、既存エージェント（受付・実行・サマリ）のインターフェースは `list[str]` のまま維持する。Engine が各エージェント呼び出し前に `list[CriterionInput]` → `list[str]` への変換を行う:
+- `str` → そのまま
+- `CommandCriterion` → `description or command`（表示名またはコマンド文字列）
+
+これにより、受付・実行・サマリエージェントの Protocol 変更を最小限に抑える。`IntakeResult.criteria` も `list[str]` のまま維持する。
 
 ## Complexity Tracking
 

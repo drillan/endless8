@@ -7,9 +7,9 @@ It serves as a reference for implementation - not executable code.
 # --- models/criteria.py ---
 
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, Discriminator, Field, Tag
+from pydantic import BaseModel, Discriminator, Field, Tag, model_validator
 
 
 class CriterionType(StrEnum):
@@ -41,16 +41,21 @@ def _criterion_discriminator(v: object) -> str:
 
     Returns:
         判別タグ（"str" or "command"）
+
+    Raises:
+        ValueError: 判別不可能な入力値の場合
     """
     if isinstance(v, str):
         return "str"
     if isinstance(v, dict):
         if v.get("type") == "command":
             return "command"
-        return "str"
+        raise ValueError(
+            f"Dict criterion must have type='command', got type={v.get('type')!r}"
+        )
     if isinstance(v, CommandCriterion):
         return "command"
-    return "str"
+    raise ValueError(f"Cannot discriminate criterion from {type(v).__name__}")
 
 
 CriterionInput = Annotated[
@@ -90,6 +95,30 @@ class CriteriaEvaluation(BaseModel):
     command_result: CommandResult | None = Field(
         None, description="コマンド実行結果（command 型のみ）"
     )
+
+    @model_validator(mode="after")
+    def validate_evaluation_consistency(self) -> Self:
+        """Validate cross-field invariants.
+
+        - evaluation_method == 'command' → confidence == 1.0 (FR-011)
+        - evaluation_method == 'command' → command_result is not None
+        - evaluation_method == 'semantic' → command_result is None
+        """
+        if self.evaluation_method == CriterionType.COMMAND:
+            if self.confidence != 1.0:
+                raise ValueError(
+                    "Command evaluation confidence must be 1.0 (FR-011)"
+                )
+            if self.command_result is None:
+                raise ValueError(
+                    "command_result is required for command evaluation"
+                )
+        elif self.evaluation_method == CriterionType.SEMANTIC:
+            if self.command_result is not None:
+                raise ValueError(
+                    "command_result must be None for semantic evaluation"
+                )
+        return self
 
 
 # --- command/executor.py ---
@@ -154,7 +183,7 @@ class JudgmentContext(BaseModel):
 
     task: str = Field(..., description="タスクの説明")
     criteria: list[str] = Field(..., description="意味的完了条件のテキストのみ")
-    execution_summary: ... = Field(..., description="実行サマリ")
+    execution_summary: "ExecutionSummary" = Field(..., description="実行サマリ")
     command_results: list[CommandCriterionResult] | None = Field(
         None, description="コマンド条件の判定結果（FR-007）"
     )

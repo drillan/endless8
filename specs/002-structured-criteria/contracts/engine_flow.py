@@ -2,7 +2,17 @@
 
 This contract defines the judgment phase flow extension in the Engine.
 It serves as a reference for implementation - not executable code.
+
+Types referenced (from other modules):
+- CriterionInput: str | CommandCriterion (models/criteria.py)
+- CriteriaEvaluation: (models/results.py)
+- CommandCriterionResult: (agents/__init__.py)
+- JudgmentResult: (models/results.py)
+- TaskInput: (models/task.py)
+- ExecutionSummary: (models/summary.py)
 """
+
+from __future__ import annotations
 
 
 class Engine:
@@ -10,10 +20,11 @@ class Engine:
 
     async def _run_command_criteria(
         self,
-        criteria: list,  # list[CriterionInput]
+        criteria: list[str | object],  # list[CriterionInput]
         cwd: str,
         default_timeout: float,
-    ) -> tuple[list, list]:  # (command_evaluations, command_criterion_results)
+    ) -> tuple[list[object], list[object]]:
+        # Returns: (list[CriteriaEvaluation], list[CommandCriterionResult])
         """コマンド条件を順次実行し、評価結果を返す。
 
         Args:
@@ -40,8 +51,8 @@ class Engine:
 
     async def _build_judgment_result_from_commands(
         self,
-        command_evaluations: list,  # list[CriteriaEvaluation]
-    ) -> ...:  # JudgmentResult
+        command_evaluations: list[object],  # list[CriteriaEvaluation]
+    ) -> object:  # JudgmentResult
         """コマンド条件のみの場合に JudgmentResult を構築。
 
         FR-010: コマンド条件のみのタスクでは LLM 判定を省略。
@@ -53,10 +64,10 @@ class Engine:
 
     async def _judgment_phase(
         self,
-        task_input: ...,  # TaskInput
-        summary: ...,  # ExecutionSummary
+        task_input: object,  # TaskInput
+        summary: object,  # ExecutionSummary
         iteration: int,
-    ) -> ...:  # JudgmentResult
+    ) -> object:  # JudgmentResult
         """判定フェーズ（拡張版）。
 
         Flow:

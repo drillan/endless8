@@ -31,14 +31,17 @@ CriterionInput = str | CommandCriterion
 #### 型判別ロジック
 
 ```python
-def criterion_discriminator(v: Any) -> str:
+def criterion_discriminator(v: object) -> str:
     if isinstance(v, str):
         return "str"
-    if isinstance(v, dict) and v.get("type") == "command":
-        return "command"
+    if isinstance(v, dict):
+        if v.get("type") == "command":
+            return "command"
+        raise ValueError(f"Dict criterion must have type='command', got type={v.get('type')!r}")
     if isinstance(v, CommandCriterion):
         return "command"
-    # 判別不可能 → ValidationError
+    raise ValueError(f"Cannot discriminate criterion from {type(v).__name__}")
+    # 判別不可能 → ValueError → Pydantic が ValidationError に変換
 ```
 
 ---
