@@ -5,6 +5,8 @@ from pathlib import Path
 import yaml
 
 from endless8.config.settings import (
+    COMMAND_OUTPUT_MAX_BYTES,
+    DEFAULT_COMMAND_TIMEOUT_SEC,
     ClaudeOptions,
     EngineConfig,
     LoggingOptions,
@@ -13,6 +15,8 @@ from endless8.config.settings import (
 )
 
 __all__ = [
+    "COMMAND_OUTPUT_MAX_BYTES",
+    "DEFAULT_COMMAND_TIMEOUT_SEC",
     "ClaudeOptions",
     "EngineConfig",
     "LoggingOptions",

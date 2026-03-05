@@ -1,13 +1,13 @@
 """Progress event models for endless8."""
 
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import NotRequired, TypedDict
 
 from pydantic import BaseModel, Field
 
 
-class ProgressEventType(str, Enum):
+class ProgressEventType(StrEnum):
     """進捗イベントタイプ。"""
 
     TASK_START = "task_start"  # タスク開始

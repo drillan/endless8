@@ -17,6 +17,7 @@ from endless8.agents import ExecutionContext, JudgmentContext
 from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
 from endless8.models import (
+    CriterionInput,
     ExecutionResult,
     ExecutionSummary,
     IntakeResult,
@@ -29,6 +30,19 @@ from endless8.models import (
     ProgressEventType,
     TaskInput,
 )
+
+
+def _criteria_to_str_list(criteria: list[CriterionInput]) -> list[str]:
+    """Convert CriterionInput list to str list for agent interfaces.
+
+    Args:
+        criteria: list of CriterionInput (str | CommandCriterion)
+
+    Returns:
+        list of str representations for each criterion
+    """
+    return [c if isinstance(c, str) else (c.description or c.command) for c in criteria]
+
 
 # Progress callback type
 ProgressCallback = (
@@ -269,6 +283,9 @@ class Engine:
             if resume:
                 await self._initialize_from_history()
 
+            # Run intake validation
+            criteria_str = _criteria_to_str_list(task_input.criteria)
+
             # Emit task start event
             start_msg = (
                 "タスク再開" if resume and self._start_iteration > 1 else "タスク開始"
@@ -279,15 +296,13 @@ class Engine:
                 f"{start_msg}: {task_input.task[:50]}...",
                 data={
                     "task": task_input.task,
-                    "criteria": task_input.criteria,
+                    "criteria": criteria_str,
                     "resume": resume,
                 },
             )
-
-            # Run intake validation
             if self._intake_agent:
                 intake_result = await self._intake_agent.run(
-                    task_input.task, task_input.criteria
+                    task_input.task, criteria_str
                 )
 
                 await self._emit_progress(
@@ -393,7 +408,7 @@ class Engine:
                 # Build execution context
                 context = ExecutionContext(
                     task=task_input.task,
-                    criteria=task_input.criteria,
+                    criteria=criteria_str,
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
@@ -424,7 +439,7 @@ class Engine:
                 # Summarize
                 if self._summary_agent:
                     summary, knowledge_list = await self._summary_agent.run(
-                        execution_result, iteration, task_input.criteria
+                        execution_result, iteration, criteria_str
                     )
                     self._history.append(summary)
                     self._knowledge.extend(knowledge_list)
@@ -443,7 +458,7 @@ class Engine:
                 if self._judgment_agent:
                     judgment_context = JudgmentContext(
                         task=task_input.task,
-                        criteria=task_input.criteria,
+                        criteria=criteria_str,
                         execution_summary=summary,
                         custom_prompt=self._config.prompts.judgment,
                     )
@@ -556,9 +571,10 @@ class Engine:
 
         try:
             # Run intake validation
+            criteria_str = _criteria_to_str_list(task_input.criteria)
             if self._intake_agent:
                 intake_result = await self._intake_agent.run(
-                    task_input.task, task_input.criteria
+                    task_input.task, criteria_str
                 )
                 if intake_result.status == IntakeStatus.NEEDS_CLARIFICATION:
                     self._is_running = False
@@ -576,7 +592,7 @@ class Engine:
                 # Build execution context
                 context = ExecutionContext(
                     task=task_input.task,
-                    criteria=task_input.criteria,
+                    criteria=criteria_str,
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
@@ -600,7 +616,7 @@ class Engine:
                 # Summarize
                 if self._summary_agent:
                     summary, knowledge_list = await self._summary_agent.run(
-                        execution_result, iteration, task_input.criteria
+                        execution_result, iteration, criteria_str
                     )
                     self._history.append(summary)
                     self._knowledge.extend(knowledge_list)
@@ -621,7 +637,7 @@ class Engine:
                 if self._judgment_agent:
                     judgment_context = JudgmentContext(
                         task=task_input.task,
-                        criteria=task_input.criteria,
+                        criteria=criteria_str,
                         execution_summary=summary,
                         custom_prompt=self._config.prompts.judgment,
                     )
