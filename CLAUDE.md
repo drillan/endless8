@@ -80,6 +80,8 @@ uv run python ...
 ## Active Technologies
 - Python 3.13+ + pydantic-ai, claudecode-model, DuckDB, typer (CLI), pyyaml (001-endless8-engine-core)
 - JSONL形式ファイル（.e8/tasks/<task-id>/history.jsonl, .e8/tasks/<task-id>/knowledge.jsonl, .e8/tasks/<task-id>/logs/） (001-endless8-engine-core)
+- Python 3.13+ + pydantic-ai >= 1.46.0, claudecode-model, duckdb >= 1.4.3, typer >= 0.21.1, pyyaml >= 6.0.0 (002-structured-criteria)
+- JSONL ファイル（`.e8/tasks/<task-id>/history.jsonl`, `knowledge.jsonl`） (002-structured-criteria)
 
 ## Recent Changes
 - 001-endless8-engine-core: Added Python 3.13+ + pydantic-ai, claudecode-model, DuckDB, typer (CLI), pyyaml
