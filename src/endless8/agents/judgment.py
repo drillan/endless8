@@ -110,6 +110,21 @@ class JudgmentAgent:
 ## 変更ファイル
 {", ".join(summary.metadata.files_modified) if summary.metadata.files_modified else "なし"}
 """
+
+        # FR-007: Include command results as additional context for semantic judgment
+        if context.command_results:
+            lines = ["## コマンド条件判定結果", ""]
+            for cr in context.command_results:
+                status = "✅ met" if cr.is_met else "❌ not met"
+                lines.append(f"- **{cr.description}** (`{cr.command}`): {status}")
+                lines.append(f"  - 終了コード: {cr.result.exit_code}")
+                if cr.result.stdout:
+                    lines.append(f"  - stdout: {cr.result.stdout[:500]}")
+                if cr.result.stderr:
+                    lines.append(f"  - stderr: {cr.result.stderr[:500]}")
+            lines.append("")
+            prompt += "\n".join(lines)
+
         return prompt
 
     async def run(self, context: JudgmentContext) -> JudgmentResult:

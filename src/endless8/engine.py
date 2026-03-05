@@ -9,15 +9,21 @@ The Engine coordinates the 4 agents:
 
 import asyncio
 import logging
+import os
 import traceback
 from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Protocol
 
-from endless8.agents import ExecutionContext, JudgmentContext
+from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
+from endless8.command.executor import CommandExecutor
 from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
 from endless8.models import (
+    CommandCriterion,
+    CriteriaEvaluation,
     CriterionInput,
+    CriterionType,
     ExecutionResult,
     ExecutionSummary,
     IntakeResult,
@@ -177,6 +183,181 @@ class Engine:
                 "Failed to write output.md; raw_output_context will not be available on resume",
                 exc_info=True,
             )
+
+    async def _run_command_criteria(
+        self,
+        criteria: list[CriterionInput],
+        cwd: str,
+        default_timeout: float,
+    ) -> tuple[list[CriteriaEvaluation], list[CommandCriterionResult]]:
+        """Run command criteria and return evaluations.
+
+        Args:
+            criteria: Full criteria list (semantic + command).
+            cwd: Working directory for command execution (FR-014).
+            default_timeout: Default timeout in seconds.
+
+        Returns:
+            tuple of (command_evaluations, command_criterion_results).
+
+        Raises:
+            CommandExecutionError: On execution error (FR-009).
+        """
+        executor = CommandExecutor()
+        command_evaluations: list[CriteriaEvaluation] = []
+        command_criterion_results: list[CommandCriterionResult] = []
+
+        for index, criterion in enumerate(criteria):
+            if not isinstance(criterion, CommandCriterion):
+                continue
+
+            timeout = criterion.timeout or default_timeout
+            result = await executor.execute(criterion.command, cwd, timeout)
+
+            is_met = result.exit_code == 0
+            description = criterion.description or criterion.command
+
+            evidence_parts = [f"exit_code={result.exit_code}"]
+            if result.stdout:
+                evidence_parts.append(f"stdout: {result.stdout[:200]}")
+            if result.stderr:
+                evidence_parts.append(f"stderr: {result.stderr[:200]}")
+
+            command_evaluations.append(
+                CriteriaEvaluation(
+                    criterion=description,
+                    is_met=is_met,
+                    evidence=", ".join(evidence_parts),
+                    confidence=1.0,
+                    evaluation_method=CriterionType.COMMAND,
+                    command_result=result,
+                )
+            )
+
+            command_criterion_results.append(
+                CommandCriterionResult(
+                    criterion_index=index,
+                    description=description,
+                    command=criterion.command,
+                    is_met=is_met,
+                    result=result,
+                )
+            )
+
+        return command_evaluations, command_criterion_results
+
+    def _build_judgment_result_from_commands(
+        self,
+        command_evaluations: list[CriteriaEvaluation],
+    ) -> JudgmentResult:
+        """Build JudgmentResult from command evaluations only (FR-010).
+
+        Used when there are no semantic criteria, so LLM judgment is skipped.
+
+        Args:
+            command_evaluations: Evaluations from command criteria.
+
+        Returns:
+            JudgmentResult built from command results only.
+        """
+        all_met = all(e.is_met for e in command_evaluations)
+        if all_met:
+            overall_reason = "すべてのコマンド条件が満たされました"
+        else:
+            not_met = [e.criterion for e in command_evaluations if not e.is_met]
+            overall_reason = f"未達成のコマンド条件: {', '.join(not_met)}"
+
+        return JudgmentResult(
+            is_complete=all_met,
+            evaluations=command_evaluations,
+            overall_reason=overall_reason,
+            suggested_next_action=None
+            if all_met
+            else "未達成のコマンド条件を確認してください",
+        )
+
+    def _has_semantic_criteria(self, criteria: list[CriterionInput]) -> bool:
+        """Check if criteria list contains any semantic (str) criteria."""
+        return any(isinstance(c, str) for c in criteria)
+
+    async def _judgment_phase(
+        self,
+        task_input: TaskInput,
+        summary: ExecutionSummary,
+    ) -> JudgmentResult:
+        """Execute the judgment phase with mixed criteria support.
+
+        Flow:
+            1. Run command criteria (_run_command_criteria)
+            2. Determine if semantic criteria exist
+               a. No semantic criteria -> _build_judgment_result_from_commands (FR-010)
+               b. Semantic criteria exist -> JudgmentAgent.run() with command_results
+            3. Merge command evaluations + semantic evaluations into unified JudgmentResult
+
+        Args:
+            task_input: Task input with criteria.
+            summary: Execution summary from current iteration.
+
+        Returns:
+            JudgmentResult with all evaluations merged.
+        """
+        criteria = task_input.criteria
+
+        # Resolve working directory for command execution (FR-014)
+        if self._history_store:
+            cwd = str(self._history_store.path.parent)
+        elif self._config.persist:
+            cwd = str(Path(self._config.persist).parent)
+        else:
+            cwd = os.getcwd()
+
+        # Step 1: Run command criteria
+        (
+            command_evaluations,
+            command_criterion_results,
+        ) = await self._run_command_criteria(
+            criteria,
+            cwd=cwd,
+            default_timeout=self._config.command_timeout,
+        )
+
+        has_semantic = self._has_semantic_criteria(criteria)
+
+        # Step 2a: Command-only -> skip LLM (FR-010)
+        if not has_semantic:
+            return self._build_judgment_result_from_commands(command_evaluations)
+
+        # Step 2b: Mixed or semantic-only -> run LLM judgment
+        if not self._judgment_agent:
+            raise RuntimeError("Judgment agent not configured")
+
+        semantic_criteria = [c for c in criteria if isinstance(c, str)]
+        judgment_context = JudgmentContext(
+            task=task_input.task,
+            criteria=semantic_criteria,
+            execution_summary=summary,
+            command_results=command_criterion_results
+            if command_criterion_results
+            else None,
+            custom_prompt=self._config.prompts.judgment,
+        )
+        semantic_judgment = await self._judgment_agent.run(judgment_context)
+
+        # Step 3: Merge evaluations if there are command evaluations
+        if not command_evaluations:
+            return semantic_judgment
+
+        merged_evaluations = command_evaluations + semantic_judgment.evaluations
+        all_met = all(e.is_met for e in merged_evaluations)
+
+        return JudgmentResult(
+            is_complete=all_met,
+            evaluations=merged_evaluations,
+            overall_reason=semantic_judgment.overall_reason,
+            suggested_next_action=semantic_judgment.suggested_next_action
+            if not all_met
+            else None,
+        )
 
     async def _get_history_context(self) -> str:
         """Get formatted history context for execution agent.
@@ -454,60 +635,49 @@ class Engine:
                 else:
                     raise RuntimeError("Summary agent not configured")
 
-                # Judge
-                if self._judgment_agent:
-                    judgment_context = JudgmentContext(
-                        task=task_input.task,
-                        criteria=criteria_str,
-                        execution_summary=summary,
-                        custom_prompt=self._config.prompts.judgment,
-                    )
-                    final_judgment = await self._judgment_agent.run(judgment_context)
+                # Judge (mixed criteria support via _judgment_phase)
+                final_judgment = await self._judgment_phase(task_input, summary)
 
+                await self._emit_progress(
+                    on_progress,
+                    ProgressEventType.JUDGMENT_COMPLETE,
+                    f"判定完了: {'完了' if final_judgment.is_complete else '未完了'}",
+                    iteration=iteration,
+                    data={"is_complete": final_judgment.is_complete},
+                )
+
+                # Emit iteration end
+                await self._emit_progress(
+                    on_progress,
+                    ProgressEventType.ITERATION_END,
+                    f"イテレーション {iteration} 終了",
+                    iteration=iteration,
+                    data={"result": summary.result.value},
+                )
+
+                # Save judgment to history
+                if self._history_store:
+                    await self._history_store.append_judgment(final_judgment, iteration)
+
+                if final_judgment.is_complete:
+                    self._is_running = False
                     await self._emit_progress(
                         on_progress,
-                        ProgressEventType.JUDGMENT_COMPLETE,
-                        f"判定完了: {'完了' if final_judgment.is_complete else '未完了'}",
+                        ProgressEventType.TASK_END,
+                        f"タスク完了 ({iteration} イテレーション)",
                         iteration=iteration,
-                        data={"is_complete": final_judgment.is_complete},
+                        data={"status": "completed"},
                     )
-
-                    # Emit iteration end
-                    await self._emit_progress(
-                        on_progress,
-                        ProgressEventType.ITERATION_END,
-                        f"イテレーション {iteration} 終了",
-                        iteration=iteration,
-                        data={"result": summary.result.value},
+                    result = LoopResult(
+                        status=LoopStatus.COMPLETED,
+                        iterations_used=iteration,
+                        final_judgment=final_judgment,
+                        history_path=self._config.persist,
                     )
-
-                    # Save judgment to history
+                    # Save final result to history
                     if self._history_store:
-                        await self._history_store.append_judgment(
-                            final_judgment, iteration
-                        )
-
-                    if final_judgment.is_complete:
-                        self._is_running = False
-                        await self._emit_progress(
-                            on_progress,
-                            ProgressEventType.TASK_END,
-                            f"タスク完了 ({iteration} イテレーション)",
-                            iteration=iteration,
-                            data={"status": "completed"},
-                        )
-                        result = LoopResult(
-                            status=LoopStatus.COMPLETED,
-                            iterations_used=iteration,
-                            final_judgment=final_judgment,
-                            history_path=self._config.persist,
-                        )
-                        # Save final result to history
-                        if self._history_store:
-                            await self._history_store.append_final_result(result)
-                        return result
-                else:
-                    raise RuntimeError("Judgment agent not configured")
+                        await self._history_store.append_final_result(result)
+                    return result
 
             # Max iterations reached
             self._is_running = False
@@ -633,25 +803,16 @@ class Engine:
                 else:
                     raise RuntimeError("Summary agent not configured")
 
-                # Judge
-                if self._judgment_agent:
-                    judgment_context = JudgmentContext(
-                        task=task_input.task,
-                        criteria=criteria_str,
-                        execution_summary=summary,
-                        custom_prompt=self._config.prompts.judgment,
-                    )
-                    judgment = await self._judgment_agent.run(judgment_context)
+                # Judge (mixed criteria support via _judgment_phase)
+                judgment = await self._judgment_phase(task_input, summary)
 
-                    # Save judgment to history
-                    if self._history_store:
-                        await self._history_store.append_judgment(judgment, iteration)
+                # Save judgment to history
+                if self._history_store:
+                    await self._history_store.append_judgment(judgment, iteration)
 
-                    if judgment.is_complete:
-                        self._is_running = False
-                        return
-                else:
-                    raise RuntimeError("Judgment agent not configured")
+                if judgment.is_complete:
+                    self._is_running = False
+                    return
 
             self._is_running = False
 

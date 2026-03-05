@@ -38,8 +38,11 @@ class JudgmentContext(BaseModel):
     """判定エージェントに渡すコンテキスト。"""
 
     task: str = Field(..., description="タスクの説明")
-    criteria: list[str] = Field(..., description="完了条件のリスト")
+    criteria: list[str] = Field(..., description="意味的完了条件のテキストのみ")
     execution_summary: ExecutionSummary = Field(..., description="実行サマリ")
+    command_results: list["CommandCriterionResult"] | None = Field(
+        None, description="コマンド条件の判定結果（FR-007）"
+    )
     custom_prompt: str | None = Field(None, description="prompts.judgment からの上書き")
 
 
