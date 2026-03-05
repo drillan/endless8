@@ -4,11 +4,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from endless8.agents import JudgmentContext
+from endless8.agents import CommandCriterionResult, JudgmentContext
 from endless8.models import (
+    CommandResult,
     CriteriaEvaluation,
+    CriterionType,
+    ExecutionResult,
     ExecutionStatus,
     ExecutionSummary,
+    IntakeResult,
+    IntakeStatus,
     JudgmentResult,
     SummaryMetadata,
 )
@@ -403,3 +408,679 @@ class TestJudgmentAgentMaxTurns:
             mock_create_model.assert_called_once()
             call_kwargs = mock_create_model.call_args
             assert call_kwargs.kwargs.get("max_turns") == 10
+
+
+# --- US2: Mixed semantic and command criteria ---
+
+
+class TestJudgmentContextCommandResults:
+    """Tests for JudgmentContext with command_results field (T014)."""
+
+    @pytest.fixture
+    def execution_summary(self) -> ExecutionSummary:
+        """Create sample execution summary."""
+        return ExecutionSummary(
+            iteration=1,
+            approach="テスト実行",
+            result=ExecutionStatus.SUCCESS,
+            reason="完了",
+            artifacts=[],
+            metadata=SummaryMetadata(),
+            timestamp="2026-03-05T10:00:00Z",
+        )
+
+    @pytest.fixture
+    def sample_command_results(self) -> list[CommandCriterionResult]:
+        """Create sample command criterion results."""
+        return [
+            CommandCriterionResult(
+                criterion_index=1,
+                description="テストが全パスする",
+                command="pytest",
+                is_met=True,
+                result=CommandResult(
+                    exit_code=0,
+                    stdout="all tests passed",
+                    stderr="",
+                    execution_time_sec=2.5,
+                ),
+            ),
+        ]
+
+    def test_judgment_context_accepts_command_results(
+        self,
+        execution_summary: ExecutionSummary,
+        sample_command_results: list[CommandCriterionResult],
+    ) -> None:
+        """JudgmentContext should accept command_results field."""
+        context = JudgmentContext(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+            execution_summary=execution_summary,
+            command_results=sample_command_results,
+        )
+        assert context.command_results is not None
+        assert len(context.command_results) == 1
+        assert context.command_results[0].is_met is True
+
+    def test_judgment_context_command_results_defaults_to_none(
+        self,
+        execution_summary: ExecutionSummary,
+    ) -> None:
+        """JudgmentContext.command_results should default to None."""
+        context = JudgmentContext(
+            task="テスト",
+            criteria=["条件"],
+            execution_summary=execution_summary,
+        )
+        assert context.command_results is None
+
+
+class TestJudgmentAgentPromptWithCommandResults:
+    """Tests for _build_prompt including command results (T015)."""
+
+    @pytest.fixture
+    def execution_summary(self) -> ExecutionSummary:
+        return ExecutionSummary(
+            iteration=1,
+            approach="実装",
+            result=ExecutionStatus.SUCCESS,
+            reason="完了",
+            artifacts=[],
+            metadata=SummaryMetadata(),
+            timestamp="2026-03-05T10:00:00Z",
+        )
+
+    @pytest.fixture
+    def command_results_met(self) -> list[CommandCriterionResult]:
+        return [
+            CommandCriterionResult(
+                criterion_index=1,
+                description="pytest が全パスする",
+                command="pytest",
+                is_met=True,
+                result=CommandResult(
+                    exit_code=0,
+                    stdout="5 passed",
+                    stderr="",
+                    execution_time_sec=1.0,
+                ),
+            ),
+        ]
+
+    def test_build_prompt_includes_command_results_section(
+        self,
+        execution_summary: ExecutionSummary,
+        command_results_met: list[CommandCriterionResult],
+    ) -> None:
+        """_build_prompt should include command results section when command_results is present."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        context = JudgmentContext(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+            execution_summary=execution_summary,
+            command_results=command_results_met,
+        )
+
+        agent = JudgmentAgent()
+        prompt = agent._build_prompt(context)
+
+        assert "コマンド条件判定結果" in prompt
+        assert "pytest" in prompt
+        assert "5 passed" in prompt
+        assert "met" in prompt.lower() or "合格" in prompt
+
+    def test_build_prompt_excludes_command_results_when_none(
+        self,
+        execution_summary: ExecutionSummary,
+    ) -> None:
+        """_build_prompt should not include command results section when None."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        context = JudgmentContext(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+            execution_summary=execution_summary,
+        )
+
+        agent = JudgmentAgent()
+        prompt = agent._build_prompt(context)
+
+        assert "コマンド条件判定結果" not in prompt
+
+    def test_build_prompt_excludes_command_results_when_empty(
+        self,
+        execution_summary: ExecutionSummary,
+    ) -> None:
+        """_build_prompt should not include command results section when empty list."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        context = JudgmentContext(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+            execution_summary=execution_summary,
+            command_results=[],
+        )
+
+        agent = JudgmentAgent()
+        prompt = agent._build_prompt(context)
+
+        assert "コマンド条件判定結果" not in prompt
+
+    def test_build_prompt_shows_not_met_command(
+        self,
+        execution_summary: ExecutionSummary,
+    ) -> None:
+        """_build_prompt should clearly show not-met command results."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        context = JudgmentContext(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+            execution_summary=execution_summary,
+            command_results=[
+                CommandCriterionResult(
+                    criterion_index=0,
+                    description="カバレッジ90%以上",
+                    command="pytest --cov --cov-fail-under=90",
+                    is_met=False,
+                    result=CommandResult(
+                        exit_code=1,
+                        stdout="coverage: 85%",
+                        stderr="FAIL Required 90%",
+                        execution_time_sec=3.0,
+                    ),
+                ),
+            ],
+        )
+
+        agent = JudgmentAgent()
+        prompt = agent._build_prompt(context)
+
+        assert "カバレッジ90%以上" in prompt
+        assert "coverage: 85%" in prompt or "FAIL Required 90%" in prompt
+
+
+class TestEngineMixedJudgmentFlow:
+    """Tests for Engine mixed judgment flow (T016).
+
+    Tests mock _run_command_criteria to isolate the mixed flow logic.
+    """
+
+    @pytest.fixture
+    def mock_intake_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テスト",
+            criteria=["コードが読みやすい"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_execution_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="実装完了",
+            artifacts=[],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_summary_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="実装",
+                result=ExecutionStatus.SUCCESS,
+                reason="完了",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-03-05T10:00:00Z",
+            ),
+            [],
+        )
+        return agent
+
+    @pytest.fixture
+    def command_eval_met(self) -> CriteriaEvaluation:
+        return CriteriaEvaluation(
+            criterion="pytest が全パスする",
+            is_met=True,
+            evidence="exit_code=0, stdout: 5 passed",
+            confidence=1.0,
+            evaluation_method=CriterionType.COMMAND,
+            command_result=CommandResult(
+                exit_code=0, stdout="5 passed", stderr="", execution_time_sec=1.0
+            ),
+        )
+
+    @pytest.fixture
+    def command_eval_not_met(self) -> CriteriaEvaluation:
+        return CriteriaEvaluation(
+            criterion="pytest が全パスする",
+            is_met=False,
+            evidence="exit_code=1, stderr: 2 failed",
+            confidence=1.0,
+            evaluation_method=CriterionType.COMMAND,
+            command_result=CommandResult(
+                exit_code=1, stdout="", stderr="2 failed", execution_time_sec=1.0
+            ),
+        )
+
+    @pytest.fixture
+    def command_criterion_result_met(self) -> CommandCriterionResult:
+        return CommandCriterionResult(
+            criterion_index=1,
+            description="pytest が全パスする",
+            command="pytest",
+            is_met=True,
+            result=CommandResult(
+                exit_code=0, stdout="5 passed", stderr="", execution_time_sec=1.0
+            ),
+        )
+
+    @pytest.fixture
+    def command_criterion_result_not_met(self) -> CommandCriterionResult:
+        return CommandCriterionResult(
+            criterion_index=1,
+            description="pytest が全パスする",
+            command="pytest",
+            is_met=False,
+            result=CommandResult(
+                exit_code=1, stdout="", stderr="2 failed", execution_time_sec=1.0
+            ),
+        )
+
+    async def test_mixed_command_met_semantic_not_met_is_incomplete(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        command_eval_met: CriteriaEvaluation,
+        command_criterion_result_met: CommandCriterionResult,
+    ) -> None:
+        """Command met + semantic not met = task incomplete (SC-004)."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import CommandCriterion, LoopStatus, TaskInput
+
+        semantic_eval_not_met = CriteriaEvaluation(
+            criterion="コードが読みやすい",
+            is_met=False,
+            evidence="可読性が不十分",
+            confidence=0.8,
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=False,
+            evaluations=[semantic_eval_not_met],
+            overall_reason="意味的条件が未達成",
+            suggested_next_action="コードをリファクタリング",
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        # Mock _run_command_criteria to return pre-computed results
+        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            )
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                "コードが読みやすい",
+                CommandCriterion(
+                    type="command", command="pytest", description="pytest が全パスする"
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.MAX_ITERATIONS
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is False
+        # Verify merged evaluations contain both command and semantic
+        eval_methods = {e.evaluation_method for e in result.final_judgment.evaluations}
+        assert CriterionType.COMMAND in eval_methods
+        assert CriterionType.SEMANTIC in eval_methods
+
+    async def test_mixed_semantic_met_command_not_met_is_incomplete(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        command_eval_not_met: CriteriaEvaluation,
+        command_criterion_result_not_met: CommandCriterionResult,
+    ) -> None:
+        """Semantic met + command not met = task incomplete (SC-004)."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import CommandCriterion, LoopStatus, TaskInput
+
+        semantic_eval_met = CriteriaEvaluation(
+            criterion="コードが読みやすい",
+            is_met=True,
+            evidence="コードは読みやすい",
+            confidence=0.9,
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[semantic_eval_met],
+            overall_reason="意味的条件は達成",
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
+            return_value=(
+                [command_eval_not_met],
+                [command_criterion_result_not_met],
+            )
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                "コードが読みやすい",
+                CommandCriterion(
+                    type="command", command="pytest", description="pytest が全パスする"
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.MAX_ITERATIONS
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is False
+
+    async def test_mixed_both_met_is_complete(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        command_eval_met: CriteriaEvaluation,
+        command_criterion_result_met: CommandCriterionResult,
+    ) -> None:
+        """Both command and semantic met = task complete."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import CommandCriterion, LoopStatus, TaskInput
+
+        semantic_eval_met = CriteriaEvaluation(
+            criterion="コードが読みやすい",
+            is_met=True,
+            evidence="コードは読みやすい",
+            confidence=0.9,
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[semantic_eval_met],
+            overall_reason="すべて達成",
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            )
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                "コードが読みやすい",
+                CommandCriterion(
+                    type="command", command="pytest", description="pytest が全パスする"
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.COMPLETED
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is True
+        assert len(result.final_judgment.evaluations) == 2
+
+    async def test_command_results_passed_to_judgment_context(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        command_eval_met: CriteriaEvaluation,
+        command_criterion_result_met: CommandCriterionResult,
+    ) -> None:
+        """command_results should be passed to JudgmentContext (FR-007)."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import CommandCriterion, TaskInput
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="コードが読みやすい",
+                    is_met=True,
+                    evidence="可読性良好",
+                    confidence=0.9,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            )
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                "コードが読みやすい",
+                CommandCriterion(
+                    type="command", command="pytest", description="pytest が全パスする"
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        await engine.run(task_input)
+
+        # Verify JudgmentAgent received command_results in context
+        call_args = mock_judgment_agent.run.call_args
+        judgment_ctx: JudgmentContext = call_args[0][0]
+        assert judgment_ctx.command_results is not None
+        assert len(judgment_ctx.command_results) == 1
+        assert judgment_ctx.command_results[0].is_met is True
+
+    async def test_command_only_skips_llm_judgment(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        command_eval_met: CriteriaEvaluation,
+        command_criterion_result_met: CommandCriterionResult,
+    ) -> None:
+        """Command-only criteria should skip LLM judgment (FR-010)."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import CommandCriterion, LoopStatus, TaskInput
+
+        mock_judgment_agent = AsyncMock()
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["テスト"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            )
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                CommandCriterion(
+                    type="command", command="pytest", description="pytest が全パスする"
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        result = await engine.run(task_input)
+
+        # LLM judgment agent should NOT be called
+        mock_judgment_agent.run.assert_not_called()
+        assert result.status == LoopStatus.COMPLETED
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is True
+
+    async def test_merged_evaluations_preserve_order(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Merged evaluations should contain both command and semantic evaluations."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+        from endless8.models import CommandCriterion, TaskInput
+
+        cmd_result = CommandResult(
+            exit_code=0, stdout="ok", stderr="", execution_time_sec=0.5
+        )
+        command_eval = CriteriaEvaluation(
+            criterion="pytest パス",
+            is_met=True,
+            evidence="exit_code=0",
+            confidence=1.0,
+            evaluation_method=CriterionType.COMMAND,
+            command_result=cmd_result,
+        )
+        command_cr = CommandCriterionResult(
+            criterion_index=1,
+            description="pytest パス",
+            command="pytest",
+            is_met=True,
+            result=cmd_result,
+        )
+
+        semantic_eval = CriteriaEvaluation(
+            criterion="コードが読みやすい",
+            is_met=True,
+            evidence="良好",
+            confidence=0.9,
+        )
+
+        mock_judgment_agent = AsyncMock()
+        mock_judgment_agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[semantic_eval],
+            overall_reason="完了",
+        )
+
+        config = EngineConfig(task="テスト", criteria=["テスト"])
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
+            return_value=([command_eval], [command_cr])
+        )
+
+        task_input = TaskInput(
+            task="テスト",
+            criteria=[
+                "コードが読みやすい",
+                CommandCriterion(
+                    type="command", command="pytest", description="pytest パス"
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.final_judgment is not None
+        evals = result.final_judgment.evaluations
+        assert len(evals) == 2
+        methods = [e.evaluation_method for e in evals]
+        assert CriterionType.COMMAND in methods
+        assert CriterionType.SEMANTIC in methods
