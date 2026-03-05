@@ -126,7 +126,7 @@ Engine 内部で使用。コマンド実行の結果を保持し、JudgmentConte
 | Field | Type | Change |
 |-------|------|--------|
 | criteria | `list[CriterionInput]` | `list[str]` → `list[CriterionInput]` |
-| command_timeout | `float` | **新規追加**（デフォルト値は名前付き定数で定義） |
+| command_timeout | `float` | **新規追加**（デフォルト: 30.0 秒、名前付き定数 `DEFAULT_COMMAND_TIMEOUT_SEC` で定義） |
 
 ---
 

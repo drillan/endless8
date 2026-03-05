@@ -15,7 +15,7 @@
 **Testing**: pytest + pytest-asyncio（`tests/unit/`, `tests/integration/`）
 **Target Platform**: Linux（CLI ツール）
 **Project Type**: single
-**Performance Goals**: コマンド実行のタイムアウトをユーザーが設定可能（デフォルト値は設定で管理）
+**Performance Goals**: コマンド実行のタイムアウトをユーザーが設定可能（デフォルト: 30.0 秒、名前付き定数 `DEFAULT_COMMAND_TIMEOUT_SEC` で定義）
 **Constraints**: コマンド出力は 10KB に制限、コマンドは定義順に順次実行（並列実行なし）
 **Scale/Scope**: 既存の 4 エージェント構成を維持しつつ、判定フェーズを拡張
 
