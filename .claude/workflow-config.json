@@ -11,12 +11,13 @@
   "workflow": {
     "tdd_required": true,
     "quality_gate_required": true,
-    "auto_report": true,
-    "ci_review": false
+    "auto_report": true
   },
   "documentation": {
     "paths": [
-      "README.md"
+      "README.md",
+      "docs/",
+      "specs/"
     ],
     "changelog": "CHANGELOG.md",
     "ddd": {
