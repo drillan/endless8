@@ -26,6 +26,9 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 | `tanka-chain.yaml` | 連作短歌作成タスク |
 | `logic-puzzle.yaml` | 論理パズル解答タスク |
 | `test-cov.yaml` | テストカバレッジ改善タスク |
+| `ci-pipeline.yaml` | CI パイプラインタスク（コマンド条件のみ） |
+| `code-quality.yaml` | コード品質改善タスク（意味的 + コマンド混在条件） |
+| `database-migration.yaml` | DB マイグレーションタスク（混在条件の実践例） |
 
 ## CLI オプション一覧
 
@@ -38,6 +41,7 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 | `--project` | `-p` | プロジェクトディレクトリ |
 | `--resume` | `-r` | タスクIDを指定して再開 |
 | `--verbose` | `-V` | 詳細な実行ログを表示 |
+| `--command-timeout` | | コマンド条件のデフォルトタイムアウト秒（デフォルト: 30） |
 
 ## 設定オプション一覧
 
@@ -57,6 +61,7 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 - `raw_output_context`: 直前イテレーションの生出力参照の有効化（デフォルト: 0）
   - `0`: 生出力を参照しない（デフォルト）
   - `1`: 直前イテレーションの生出力を実行エージェントに渡す
+- `command_timeout`: コマンド条件のデフォルトタイムアウト秒（デフォルト: 30）
 
 ### ロギング（`logging`）
 
@@ -75,6 +80,74 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 
 - `judgment`: 判定エージェントのカスタムプロンプト
 - `append_system_prompt`: 実行エージェントに追加するプロンプト
+
+## 構造化された完了条件（Structured Criteria）
+
+完了条件には「意味的条件」と「コマンド条件」の2種類を指定できます。
+
+### 意味的条件（従来と同じ）
+
+文字列で指定した条件は LLM が判定します：
+
+```yaml
+criteria:
+  - "コードが読みやすい"
+  - "テストカバレッジが十分である"
+```
+
+### コマンド条件
+
+シェルコマンドの終了コードで条件を判定します（0 = met, 非ゼロ = not met）：
+
+```yaml
+criteria:
+  - type: command
+    command: "uv run pytest"
+    description: "全テストがパス"     # 任意: 人間向けの説明
+    timeout: 120                      # 任意: コマンド固有のタイムアウト（秒）
+```
+
+### 混在
+
+1つのタスクに両方の条件を混在できます。コマンド条件が先に実行され、
+その結果は意味的条件の LLM 判定時にコンテキストとして提供されます：
+
+```yaml
+criteria:
+  - "コードが読みやすい"                        # LLM 判定
+  - type: command
+    command: "uv run pytest --tb=short"         # 終了コード判定
+    description: "テスト全パス"
+```
+
+### コマンド条件のみ（LLM 判定省略）
+
+すべての条件がコマンド型の場合、LLM 判定は完全に省略されます（`ci-pipeline.yaml` 参照）：
+
+```yaml
+criteria:
+  - type: command
+    command: "uv run ruff check ."
+    description: "リンターパス"
+  - type: command
+    command: "uv run pytest"
+    description: "テストパス"
+```
+
+### タイムアウト設定
+
+| 設定 | 説明 |
+|------|------|
+| `command_timeout` | コマンド条件のデフォルトタイムアウト（秒、デフォルト: 30） |
+| `--command-timeout` | CLI からの指定（config の `command_timeout` を上書き） |
+| 各条件の `timeout` | 個別コマンドのタイムアウト（`command_timeout` より優先） |
+
+### エラー処理
+
+- プロセス起動失敗（OSError）: ループ停止、エラー報告
+- タイムアウト: ループ停止、エラー報告
+- 終了コード 127（コマンド未検出）: not met として処理（warning ログ出力）
+- stdout/stderr は各最大 10KB 記録
 
 ## 詳細: raw_output_context（生出力参照）
 

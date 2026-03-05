@@ -13,9 +13,11 @@ from endless8.config.settings import (
     MaxTurnsConfig,
     PromptsConfig,
 )
+from endless8.models.criteria import CriterionInput
 
 __all__ = [
     "COMMAND_OUTPUT_MAX_BYTES",
+    "CriterionInput",
     "DEFAULT_COMMAND_TIMEOUT_SEC",
     "ClaudeOptions",
     "EngineConfig",

@@ -1,0 +1,40 @@
+# データベースマイグレーションタスクの設定ファイル例（混在条件の実践例）
+# 使用方法: e8 run --config examples/database-migration.yaml
+#
+# 客観的なコマンド検証と主観的な品質評価を組み合わせた実践例です。
+# マイグレーションの実行可能性はコマンドで検証し、
+# コードの品質や設計の妥当性は LLM が判定します。
+
+
+task: "ユーザーテーブルにプロフィール情報カラムを追加するマイグレーションを作成する"
+criteria:
+  # コマンド条件: 客観的な検証
+  - type: command
+    command: "uv run alembic check"
+    description: "マイグレーションファイルが正しく検出される"
+  - type: command
+    command: "uv run alembic upgrade head --sql"
+    description: "マイグレーションの SQL が正常に生成される"
+    timeout: 30
+  - type: command
+    command: "uv run pytest tests/test_models.py tests/test_migrations.py -v"
+    description: "モデルとマイグレーションのテストがパス"
+    timeout: 120
+  # 意味的条件: 主観的な品質評価
+  - "マイグレーションファイルに downgrade 関数が実装されている"
+  - "既存データの整合性を保つ適切なデフォルト値が設定されている"
+
+max_iterations: 8
+command_timeout: 45
+
+history_context_size: 5
+
+claude_options:
+  timeout: 600.0
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Read"
+    - "Write"

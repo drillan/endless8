@@ -15,6 +15,27 @@ from endless8.models import (
 )
 
 
+def make_completed_result(iterations: int = 1) -> LoopResult:
+    """Create a completed LoopResult with proper final_judgment."""
+    judgment = JudgmentResult(
+        is_complete=True,
+        evaluations=[
+            CriteriaEvaluation(
+                criterion="条件",
+                is_met=True,
+                evidence="条件を満たしている",
+                confidence=1.0,
+            )
+        ],
+        overall_reason="タスク完了",
+    )
+    return LoopResult(
+        status=LoopStatus.COMPLETED,
+        iterations_used=iterations,
+        final_judgment=judgment,
+    )
+
+
 class TestVersionCallback:
     """Tests for version_callback function."""
 
@@ -74,29 +95,9 @@ class TestRunCommand:
         assert result.exit_code == 1
         assert "完了条件" in result.output or "criteria" in result.output.lower()
 
-    def _create_completed_result(self, iterations: int = 1) -> LoopResult:
-        """Create a completed LoopResult with proper final_judgment."""
-        judgment = JudgmentResult(
-            is_complete=True,
-            evaluations=[
-                CriteriaEvaluation(
-                    criterion="条件",
-                    is_met=True,
-                    evidence="条件を満たしている",
-                    confidence=1.0,
-                )
-            ],
-            overall_reason="タスク完了",
-        )
-        return LoopResult(
-            status=LoopStatus.COMPLETED,
-            iterations_used=iterations,
-            final_judgment=judgment,
-        )
-
     def test_run_shows_task_info(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that run shows task information before execution."""
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -121,7 +122,7 @@ class TestRunCommand:
 
     def test_run_creates_e8_directory(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that run creates .e8 directory."""
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -148,7 +149,7 @@ class TestRunCommand:
         self, runner: CliRunner, temp_dir: Path
     ) -> None:
         """Test that run uses default max_iterations of 10."""
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -172,7 +173,7 @@ class TestRunCommand:
 
     def test_run_completed_status(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that run shows completed status."""
-        mock_result = self._create_completed_result(iterations=3)
+        mock_result = make_completed_result(iterations=3)
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -492,29 +493,9 @@ class TestListStatus:
 class TestVerboseOption:
     """Tests for --verbose option."""
 
-    def _create_completed_result(self, iterations: int = 1) -> LoopResult:
-        """Create a completed LoopResult with proper final_judgment."""
-        judgment = JudgmentResult(
-            is_complete=True,
-            evaluations=[
-                CriteriaEvaluation(
-                    criterion="条件",
-                    is_met=True,
-                    evidence="条件を満たしている",
-                    confidence=1.0,
-                )
-            ],
-            overall_reason="タスク完了",
-        )
-        return LoopResult(
-            status=LoopStatus.COMPLETED,
-            iterations_used=iterations,
-            final_judgment=judgment,
-        )
-
     def test_verbose_option_accepted(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that --verbose option is accepted."""
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -539,7 +520,7 @@ class TestVerboseOption:
 
     def test_verbose_short_option(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that -V short option works."""
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -566,7 +547,7 @@ class TestVerboseOption:
         self, runner: CliRunner, temp_dir: Path
     ) -> None:
         """Test that verbose mode passes message_callback to ExecutionAgent."""
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with (
             patch("endless8.cli.main.Engine") as mock_engine_class,
@@ -599,7 +580,7 @@ class TestVerboseOption:
 
     def test_non_verbose_no_callback(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that non-verbose mode does not pass message_callback."""
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with (
             patch("endless8.cli.main.Engine") as mock_engine_class,
@@ -688,26 +669,6 @@ class TestFormatToolCall:
 class TestConfigFileOverride:
     """Tests for config file option override."""
 
-    def _create_completed_result(self, iterations: int = 1) -> LoopResult:
-        """Create a completed LoopResult with proper final_judgment."""
-        judgment = JudgmentResult(
-            is_complete=True,
-            evaluations=[
-                CriteriaEvaluation(
-                    criterion="条件",
-                    is_met=True,
-                    evidence="条件を満たしている",
-                    confidence=1.0,
-                )
-            ],
-            overall_reason="タスク完了",
-        )
-        return LoopResult(
-            status=LoopStatus.COMPLETED,
-            iterations_used=iterations,
-            final_judgment=judgment,
-        )
-
     def test_cli_task_overrides_config_task(
         self, runner: CliRunner, temp_dir: Path
     ) -> None:
@@ -723,7 +684,7 @@ class TestConfigFileOverride:
         }
         config_file.write_text(yaml.dump(config_data))
 
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -762,7 +723,7 @@ class TestConfigFileOverride:
         }
         config_file.write_text(yaml.dump(config_data))
 
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -801,7 +762,7 @@ class TestConfigFileOverride:
         }
         config_file.write_text(yaml.dump(config_data))
 
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with patch("endless8.cli.main.Engine") as mock_engine_class:
             mock_engine = MagicMock()
@@ -865,6 +826,147 @@ class TestConfigFileOverride:
 
         assert result.exit_code == 1
         assert "不正" in result.output or "エラー" in result.output
+
+
+class TestCommandTimeoutOption:
+    """Tests for CLI --command-timeout option."""
+
+    def test_command_timeout_option_accepted(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that --command-timeout option is accepted by CLI."""
+        mock_result = make_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--command-timeout",
+                    "60",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+
+    def test_command_timeout_passed_to_engine_config(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that --command-timeout value is passed to EngineConfig."""
+        mock_result = make_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--command-timeout",
+                    "45",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            # Check EngineConfig was created with correct command_timeout
+            call_kwargs = mock_engine_class.call_args[1]
+            config = call_kwargs["config"]
+            assert config.command_timeout == 45.0
+
+    def test_command_timeout_overrides_config_file(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that CLI --command-timeout overrides config file value."""
+        import yaml
+
+        config_file = temp_dir / "config.yaml"
+        config_data = {
+            "task": "テスト",
+            "criteria": ["条件"],
+            "command_timeout": 30,
+        }
+        config_file.write_text(yaml.dump(config_data))
+
+        mock_result = make_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--command-timeout",
+                    "120",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            call_kwargs = mock_engine_class.call_args[1]
+            config = call_kwargs["config"]
+            assert config.command_timeout == 120.0
+
+    def test_config_file_with_command_criteria_displays_correctly(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that config file with command criteria displays without error."""
+        import yaml
+
+        config_file = temp_dir / "config.yaml"
+        config_data = {
+            "task": "CI修正",
+            "criteria": [
+                "コードが読みやすい",
+                {"type": "command", "command": "pytest", "description": "テストパス"},
+            ],
+        }
+        config_file.write_text(yaml.dump(config_data, allow_unicode=True))
+
+        mock_result = make_completed_result()
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--config",
+                    str(config_file),
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+            assert result.exit_code == 0
+            assert "CI修正" in result.output
+            # Check criteria display includes both types
+            assert "コードが読みやすい" in result.output
+            assert "テストパス" in result.output
 
 
 class TestProgressCallbackEvents:
@@ -1173,26 +1275,6 @@ class TestListCommandStatusParsing:
 class TestMaxTurnsWiring:
     """Tests for max_turns wiring from config to agents."""
 
-    def _create_completed_result(self) -> LoopResult:
-        """Create a completed LoopResult."""
-        judgment = JudgmentResult(
-            is_complete=True,
-            evaluations=[
-                CriteriaEvaluation(
-                    criterion="条件",
-                    is_met=True,
-                    evidence="達成",
-                    confidence=1.0,
-                )
-            ],
-            overall_reason="完了",
-        )
-        return LoopResult(
-            status=LoopStatus.COMPLETED,
-            iterations_used=1,
-            final_judgment=judgment,
-        )
-
     def test_max_turns_from_config_passed_to_all_agents(
         self, runner: CliRunner, temp_dir: Path
     ) -> None:
@@ -1214,7 +1296,7 @@ class TestMaxTurnsWiring:
         config_file = temp_dir / "config.yaml"
         config_file.write_text(yaml.dump(config_data))
 
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with (
             patch("endless8.cli.main.Engine") as mock_engine_class,
@@ -1257,26 +1339,6 @@ class TestMaxTurnsWiring:
 class TestModelNameWiring:
     """Tests for model_name wiring from config to all agents."""
 
-    def _create_completed_result(self) -> LoopResult:
-        """Create a completed LoopResult."""
-        judgment = JudgmentResult(
-            is_complete=True,
-            evaluations=[
-                CriteriaEvaluation(
-                    criterion="条件",
-                    is_met=True,
-                    evidence="達成",
-                    confidence=1.0,
-                )
-            ],
-            overall_reason="完了",
-        )
-        return LoopResult(
-            status=LoopStatus.COMPLETED,
-            iterations_used=1,
-            final_judgment=judgment,
-        )
-
     def test_model_name_passed_to_all_agents(
         self, runner: CliRunner, temp_dir: Path
     ) -> None:
@@ -1291,7 +1353,7 @@ class TestModelNameWiring:
         config_file = temp_dir / "config.yaml"
         config_file.write_text(yaml.dump(config_data))
 
-        mock_result = self._create_completed_result()
+        mock_result = make_completed_result()
 
         with (
             patch("endless8.cli.main.Engine") as mock_engine_class,
