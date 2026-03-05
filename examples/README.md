@@ -65,8 +65,10 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 
 ### ロギング（`logging`）
 
-- `raw_log`: 生ログを保存するか（デフォルト: false）
-- `raw_log_dir`: 生ログ保存先（省略時はタスクディレクトリ内）
+- `raw_log`: 実行エージェントの stream-json 出力を JSONL で保存するか（デフォルト: `false`）
+- `raw_log_dir`: 生ログ保存先ディレクトリ（デフォルト: `.e8/logs`）
+  - ファイル名は `iteration-<N>.jsonl` 形式
+  - 保存された生ログから `SummaryAgent` がツール使用・ファイル変更・トークン数を自動抽出
 
 ### Claude CLI オプション（`claude_options`）
 

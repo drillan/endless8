@@ -6,6 +6,8 @@ The Execution Agent is responsible for:
 - Reporting semantic metadata
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from pydantic_ai import Agent
@@ -13,8 +15,10 @@ from pydantic_ai import Agent
 from endless8.agents import ExecutionContext
 from endless8.agents.model_factory import create_agent_model
 from endless8.models import ExecutionResult
+from endless8.raw_log import RawLogCollector
 
 if TYPE_CHECKING:
+    from claude_agent_sdk.types import Message
     from claudecode_model import MessageCallbackType
 
 EXECUTION_SYSTEM_PROMPT = """あなたはタスク実行エージェントです。
@@ -56,7 +60,7 @@ class ExecutionAgent:
         model_name: str = "anthropic:claude-sonnet-4-5",
         allowed_tools: list[str] | None = None,
         timeout: float = 300.0,
-        message_callback: "MessageCallbackType | None" = None,
+        message_callback: MessageCallbackType | None = None,
         max_turns: int = 50,
     ) -> None:
         """Initialize the execution agent.
@@ -77,6 +81,35 @@ class ExecutionAgent:
         self._timeout = timeout
         self._message_callback = message_callback
         self._max_turns = max_turns
+        self._raw_log_collector: RawLogCollector | None = None
+
+    @property
+    def raw_log_collector(self) -> RawLogCollector | None:
+        """Optional raw log collector for capturing stream output."""
+        return self._raw_log_collector
+
+    @raw_log_collector.setter
+    def raw_log_collector(self, collector: RawLogCollector | None) -> None:
+        self._raw_log_collector = collector
+
+    def _compose_callback(self) -> MessageCallbackType | None:
+        """Compose message callback with raw log collector if set.
+
+        Returns:
+            Composed callback, original callback, or None.
+        """
+        if self._raw_log_collector is None:
+            return self._message_callback
+
+        collector = self._raw_log_collector
+        original = self._message_callback
+
+        def composed(message: Message) -> None:
+            collector.on_message(message)
+            if original is not None:
+                original(message)
+
+        return composed
 
     def _build_prompt(self, context: ExecutionContext) -> str:
         """Build the execution prompt from context.
@@ -127,7 +160,7 @@ class ExecutionAgent:
             max_turns=self._max_turns,
             allowed_tools=self._allowed_tools,
             timeout=self._timeout,
-            message_callback=self._message_callback,
+            message_callback=self._compose_callback(),
         )
 
         agent: Agent[None, ExecutionResult] = Agent(
