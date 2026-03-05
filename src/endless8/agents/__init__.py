@@ -121,10 +121,7 @@ class SummaryAgentProtocol(Protocol):
 
 
 class CommandCriterionResult(BaseModel):
-    """コマンド条件の判定結果（Engine 内部用）。
-
-    TODO(T009): CommandExecutor 実装時に JudgmentContext.command_results として統合予定。
-    """
+    """コマンド条件の判定結果（Engine 内部用）。"""
 
     criterion_index: int = Field(
         ..., ge=0, description="criteria リスト内のインデックス"
