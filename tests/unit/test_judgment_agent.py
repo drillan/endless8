@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from claudecode_model.exceptions import CLIExecutionError
 
 from endless8.agents import CommandCriterionResult, JudgmentContext
 from endless8.models import (
@@ -1084,3 +1085,132 @@ class TestEngineMixedJudgmentFlow:
         methods = [e.evaluation_method for e in evals]
         assert CriterionType.COMMAND in methods
         assert CriterionType.SEMANTIC in methods
+
+
+class TestJudgmentAgentRetryOnCLIExecutionError:
+    """Tests for JudgmentAgent retry logic using CLIExecutionError.recoverable (#36)."""
+
+    @pytest.fixture
+    def judgment_context(self) -> JudgmentContext:
+        """Create sample judgment context."""
+        return JudgmentContext(
+            task="テスト",
+            criteria=["条件"],
+            execution_summary=ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-23T10:00:00Z",
+            ),
+        )
+
+    @pytest.fixture
+    def success_result(self) -> JudgmentResult:
+        return JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="証拠",
+                    confidence=0.9,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+    async def test_retries_on_recoverable_cli_error(
+        self,
+        judgment_context: JudgmentContext,
+        success_result: JudgmentResult,
+    ) -> None:
+        """CLIExecutionError(recoverable=True) should trigger retry and succeed."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with patch("endless8.agents.judgment.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            # First call raises recoverable error, second succeeds
+            mock_agent.run.side_effect = [
+                CLIExecutionError(
+                    "SDK query timed out after 300.0 seconds",
+                    error_type="timeout",
+                    recoverable=True,
+                ),
+                MagicMock(output=success_result),
+            ]
+            mock_agent_class.return_value = mock_agent
+
+            agent = JudgmentAgent(max_retries=3, retry_delay=0.0)
+            result = await agent.run(judgment_context)
+
+            assert result.is_complete is True
+            assert mock_agent.run.call_count == 2
+
+    async def test_no_retry_on_non_recoverable_cli_error(
+        self,
+        judgment_context: JudgmentContext,
+    ) -> None:
+        """CLIExecutionError(recoverable=False) should raise immediately without retry."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with patch("endless8.agents.judgment.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            mock_agent.run.side_effect = CLIExecutionError(
+                "Permission denied",
+                error_type="permission",
+                recoverable=False,
+            )
+            mock_agent_class.return_value = mock_agent
+
+            agent = JudgmentAgent(max_retries=3, retry_delay=0.0)
+
+            with pytest.raises(CLIExecutionError, match="Permission denied"):
+                await agent.run(judgment_context)
+
+            # Should not retry — only 1 call
+            assert mock_agent.run.call_count == 1
+
+    async def test_raises_after_all_retries_exhausted(
+        self,
+        judgment_context: JudgmentContext,
+    ) -> None:
+        """CLIExecutionError(recoverable=True) should raise after max_retries exhausted."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with patch("endless8.agents.judgment.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            mock_agent.run.side_effect = CLIExecutionError(
+                "SDK query timed out after 300.0 seconds",
+                error_type="timeout",
+                recoverable=True,
+            )
+            mock_agent_class.return_value = mock_agent
+
+            agent = JudgmentAgent(max_retries=3, retry_delay=0.0)
+
+            with pytest.raises(CLIExecutionError, match="SDK query timed out"):
+                await agent.run(judgment_context)
+
+            assert mock_agent.run.call_count == 3
+
+    async def test_no_retry_on_non_cli_exception(
+        self,
+        judgment_context: JudgmentContext,
+    ) -> None:
+        """Non-CLIExecutionError exceptions should raise immediately without retry."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with patch("endless8.agents.judgment.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            mock_agent.run.side_effect = ValueError("unexpected error")
+            mock_agent_class.return_value = mock_agent
+
+            agent = JudgmentAgent(max_retries=3, retry_delay=0.0)
+
+            with pytest.raises(ValueError, match="unexpected error"):
+                await agent.run(judgment_context)
+
+            assert mock_agent.run.call_count == 1
