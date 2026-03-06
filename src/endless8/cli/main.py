@@ -82,6 +82,9 @@ _START_FAILURE_PATTERN = re.compile(
     r"^Failed to start command '(.+?)': (.+)$",
     re.DOTALL,
 )
+_NO_RETURN_CODE_PATTERN = re.compile(
+    r"^Command '(.+?)' finished without return code$",
+)
 
 
 def _is_command_execution_error(message: str) -> bool:
@@ -90,6 +93,7 @@ def _is_command_execution_error(message: str) -> bool:
         _EXIT_CODE_PATTERN.match(message) is not None
         or _TIMEOUT_PATTERN.match(message) is not None
         or _START_FAILURE_PATTERN.match(message) is not None
+        or _NO_RETURN_CODE_PATTERN.match(message) is not None
     )
 
 
@@ -120,6 +124,15 @@ def _display_command_execution_error(message: str) -> None:
         typer.echo(f"  コマンド: {m.group(1)}")
         typer.echo(f"  原因: {m.group(2)}")
         return
+
+    m = _NO_RETURN_CODE_PATTERN.match(message)
+    if m:
+        typer.echo(f"  コマンド: {m.group(1)}")
+        typer.echo("  終了コードなし（プロセスが異常終了した可能性があります）")
+        return
+
+    # Defensive fallback: display raw message if no pattern matched
+    typer.echo(f"  {message}")
 
 
 @app.callback()

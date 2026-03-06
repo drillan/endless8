@@ -1513,6 +1513,38 @@ class TestCommandExecutionErrorDisplay:
         assert "コマンド: missing_cmd" in result.output
         assert "原因:" in result.output
 
+    def test_no_return_code_error_shows_structured_output(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """No return code error shows command and description."""
+        mock_result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message="Command 'zombie_cmd' finished without return code",
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+        assert "コマンド条件の実行エラー" in result.output
+        assert "コマンド: zombie_cmd" in result.output
+        assert "終了コードなし" in result.output
+
     def test_generic_error_still_shows_raw_message(
         self, runner: CliRunner, temp_dir: Path
     ) -> None:
