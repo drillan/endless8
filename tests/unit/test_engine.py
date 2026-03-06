@@ -2305,6 +2305,51 @@ class TestCommandExecutionErrorStopsLoop:
         assert result.status == LoopStatus.ERROR
         assert result.error_message is not None
         assert "Command failed" in result.error_message
+        # CommandExecutionError is expected — no stack trace in error_message
+        assert "Stack trace" not in result.error_message
+        assert "Traceback" not in result.error_message
+
+    async def test_command_execution_error_uses_warning_log(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """CommandExecutionError should use logger.warning, not logger.exception."""
+        from endless8.command.executor import CommandExecutionError, CommandExecutor
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        async def mock_execute(
+            _command: str, _cwd: str, _timeout: float
+        ) -> CommandResult:
+            raise CommandExecutionError(
+                "Command 'test' failed with exit code 2.\nstderr: not found"
+            )
+
+        criteria: list[str | CommandCriterion] = [
+            CommandCriterion(type="command", command="test"),
+        ]
+
+        config = EngineConfig(task="テスト", criteria=["dummy"], max_iterations=3)
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=None,
+        )
+
+        task_input = TaskInput(task="テスト", criteria=criteria, max_iterations=3)
+
+        with (
+            patch.object(CommandExecutor, "execute", side_effect=mock_execute),
+            patch("endless8.engine.logger") as mock_logger,
+        ):
+            await engine.run(task_input)
+
+        mock_logger.warning.assert_called_once()
+        mock_logger.exception.assert_not_called()
 
     async def test_first_error_stops_remaining_commands(
         self,
