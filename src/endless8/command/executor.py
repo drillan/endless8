@@ -16,8 +16,10 @@ logger = logging.getLogger(__name__)
 class CommandExecutionError(Exception):
     """コマンドの実行エラー（FR-009）。
 
-    プロセス起動失敗またはタイムアウト時に送出される。
-    コマンドが正常に起動し終了コードを返した場合は送出されない。
+    以下の場合に送出される:
+    - プロセス起動失敗（OSError）
+    - タイムアウト
+    - 終了コード 2 以上（POSIX 規約に基づくコマンド自体のエラー）
     """
 
 
@@ -87,11 +89,10 @@ class CommandExecutor:
                 f"Command '{command}' finished without return code"
             )
 
-        if exit_code == 127:
-            logger.warning(
-                "Command '%s' returned exit code 127 (command not found). "
-                "Check for typos in the command name.",
-                command,
+        if exit_code >= 2:
+            raise CommandExecutionError(
+                f"Command '{command}' failed with exit code {exit_code}.\n"
+                f"stderr: {stderr}"
             )
 
         return CommandResult(
