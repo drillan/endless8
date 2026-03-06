@@ -412,6 +412,7 @@ class TestJudgmentAndFinalResultPersistence:
             _result: ExecutionResult,
             iteration: int,
             _criteria: list[str],
+            raw_log_content: str | None = None,  # noqa: ARG001
         ) -> tuple[ExecutionSummary, list[Knowledge]]:
             summary = _make_summary(
                 iteration=iteration,
