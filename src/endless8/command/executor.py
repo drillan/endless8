@@ -46,7 +46,8 @@ class CommandExecutor:
             CommandResult: 実行結果
 
         Raises:
-            CommandExecutionError: プロセス起動失敗またはタイムアウト時（FR-009）
+            CommandExecutionError: プロセス起動失敗（OSError）、タイムアウト、
+                または終了コード 2 以上の場合（FR-009）
         """
         start_time = time.monotonic()
 
