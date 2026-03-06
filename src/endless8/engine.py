@@ -647,6 +647,7 @@ class Engine:
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
+                    working_directory=self._config.working_directory,
                     raw_output_context=self._previous_output
                     if self._should_track_raw_output
                     else None,
@@ -855,6 +856,7 @@ class Engine:
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
+                    working_directory=self._config.working_directory,
                     raw_output_context=self._previous_output
                     if self._should_track_raw_output
                     else None,

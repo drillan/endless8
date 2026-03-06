@@ -131,6 +131,10 @@ class ExecutionAgent:
         prompt = f"""## タスク
 {context.task}
 
+## 作業ディレクトリ
+{context.working_directory}
+すべてのファイル操作はこのディレクトリを基準に行ってください。
+
 ## 完了条件
 {chr(10).join(f"- {c}" for c in context.criteria)}
 

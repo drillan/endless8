@@ -91,6 +91,7 @@ class TestResearchTaskExecution:
             iteration=1,
             history_context="履歴なし",
             knowledge_context="ナレッジなし",
+            working_directory="/tmp/test",
         )
 
         # Context should be properly formatted for research task

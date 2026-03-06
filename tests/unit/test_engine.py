@@ -2399,3 +2399,100 @@ class TestCommandExecutionErrorStopsLoop:
         assert result.status == LoopStatus.ERROR
         # cmd1 succeeded, cmd2 raised error, cmd3 should NOT have been executed
         assert execute_count == 2
+
+
+class TestWorkingDirectoryPropagation:
+    """Tests for working_directory propagation to ExecutionContext."""
+
+    @pytest.fixture
+    def mock_intake_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="ファイルを作成",
+            criteria=["ファイルが存在する"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_execution_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS,
+            output="作成しました",
+            artifacts=["main.py"],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_summary_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="ファイル作成",
+                result=ExecutionStatus.SUCCESS,
+                reason="完了",
+                artifacts=["main.py"],
+                metadata=SummaryMetadata(),
+                timestamp="2026-03-06T10:00:00Z",
+            ),
+            [],
+        )
+        return agent
+
+    @pytest.fixture
+    def mock_judgment_agent(self) -> AsyncMock:
+        agent = AsyncMock()
+        agent.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="ファイルが存在する",
+                    is_met=True,
+                    evidence="ファイル確認済み",
+                    confidence=0.95,
+                )
+            ],
+            overall_reason="完了",
+        )
+        return agent
+
+    async def test_engine_passes_working_directory_to_execution_context(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+    ) -> None:
+        """Test that Engine passes working_directory from config to ExecutionContext."""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        config = EngineConfig(
+            task="ファイルを作成",
+            criteria=["ファイルが存在する"],
+            working_directory="/home/user/project",
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        task_input = TaskInput(
+            task="ファイルを作成",
+            criteria=["ファイルが存在する"],
+            max_iterations=1,
+        )
+
+        await engine.run(task_input)
+
+        # Verify execution agent received working_directory in context
+        mock_execution_agent.run.assert_called_once()
+        context = mock_execution_agent.run.call_args[0][0]
+        assert isinstance(context, ExecutionContext)
+        assert context.working_directory == "/home/user/project"
