@@ -1405,6 +1405,178 @@ class TestModelNameWiring:
             )
 
 
+class TestCommandExecutionErrorDisplay:
+    """Tests for structured display of CommandExecutionError in CLI."""
+
+    def test_exit_code_error_shows_structured_output(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Exit code error shows command, exit code, and cause separately."""
+        mock_result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message=(
+                "Command 'uv run pytest' failed with exit code 2.\n"
+                "stderr: No such file or directory"
+            ),
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+        assert "コマンド条件の実行エラー" in result.output
+        assert "コマンド: uv run pytest" in result.output
+        assert "終了コード: 2" in result.output
+        assert "原因: No such file or directory" in result.output
+        # Should NOT show raw error_message format
+        assert "failed with exit code" not in result.output
+
+    def test_timeout_error_shows_structured_output(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Timeout error shows command and timeout duration."""
+        mock_result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message="Command 'slow_cmd' timed out after 30s",
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+        assert "コマンド条件の実行エラー" in result.output
+        assert "コマンド: slow_cmd" in result.output
+        assert "タイムアウト: 30秒" in result.output
+
+    def test_start_failure_error_shows_structured_output(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Start failure error shows command and cause."""
+        mock_result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message=(
+                "Failed to start command 'missing_cmd': "
+                "[Errno 2] No such file or directory"
+            ),
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+        assert "コマンド条件の実行エラー" in result.output
+        assert "コマンド: missing_cmd" in result.output
+        assert "原因:" in result.output
+
+    def test_no_return_code_error_shows_structured_output(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """No return code error shows command and description."""
+        mock_result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message="Command 'zombie_cmd' finished without return code",
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+        assert "コマンド条件の実行エラー" in result.output
+        assert "コマンド: zombie_cmd" in result.output
+        assert "終了コードなし" in result.output
+
+    def test_generic_error_still_shows_raw_message(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Non-command errors still display the raw error message."""
+        mock_result = LoopResult(
+            status=LoopStatus.ERROR,
+            iterations_used=1,
+            error_message="Some unexpected error occurred",
+        )
+
+        with patch("endless8.cli.main.Engine") as mock_engine_class:
+            mock_engine = MagicMock()
+            mock_engine.run = AsyncMock(return_value=mock_result)
+            mock_engine_class.return_value = mock_engine
+
+            result = runner.invoke(
+                app,
+                [
+                    "run",
+                    "--task",
+                    "タスク",
+                    "--criteria",
+                    "条件",
+                    "--project",
+                    str(temp_dir),
+                ],
+            )
+
+        assert "エラー: Some unexpected error occurred" in result.output
+        assert "コマンド条件の実行エラー" not in result.output
+
+
 class TestStatusCommandKnowledge:
     """Tests for status command knowledge handling."""
 

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Protocol
 
 from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
-from endless8.command.executor import CommandExecutor
+from endless8.command.executor import CommandExecutionError, CommandExecutor
 from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
 from endless8.models import (
@@ -758,6 +758,32 @@ class Engine:
                 history_path=self._config.persist,
             )
             # Save final result to history
+            if self._history_store:
+                await self._history_store.append_final_result(result)
+            return result
+
+        except CommandExecutionError as e:
+            self._is_running = False
+            logger.warning(
+                "Command execution error at iteration %d: %s",
+                self._current_iteration,
+                e,
+            )
+            await self._emit_progress(
+                on_progress,
+                ProgressEventType.TASK_END,
+                f"コマンド条件の実行エラー: {e}",
+                iteration=self._current_iteration
+                if self._current_iteration > 0
+                else None,
+                data={"status": "error", "error": str(e)},
+            )
+            result = LoopResult(
+                status=LoopStatus.ERROR,
+                iterations_used=self._current_iteration,
+                error_message=str(e),
+            )
+            # Save final result to history (if history is available)
             if self._history_store:
                 await self._history_store.append_final_result(result)
             return result

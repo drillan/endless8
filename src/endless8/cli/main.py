@@ -5,6 +5,7 @@ Provides command-line interface for running tasks.
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
 
@@ -67,6 +68,71 @@ def _format_tool_call(tool_name: str, tool_input: dict[str, object]) -> str:
             return f"{tool_name}: {pattern}"
 
     return tool_name
+
+
+# Patterns for CommandExecutionError messages produced by CommandExecutor
+_EXIT_CODE_PATTERN = re.compile(
+    r"^Command '(.+?)' failed with exit code (\d+)\.\nstderr: (.*)",
+    re.DOTALL,
+)
+_TIMEOUT_PATTERN = re.compile(
+    r"^Command '(.+?)' timed out after ([\d.]+)s$",
+)
+_START_FAILURE_PATTERN = re.compile(
+    r"^Failed to start command '(.+?)': (.+)$",
+    re.DOTALL,
+)
+_NO_RETURN_CODE_PATTERN = re.compile(
+    r"^Command '(.+?)' finished without return code$",
+)
+
+
+def _is_command_execution_error(message: str) -> bool:
+    """Check if the error message originates from CommandExecutionError."""
+    return (
+        _EXIT_CODE_PATTERN.match(message) is not None
+        or _TIMEOUT_PATTERN.match(message) is not None
+        or _START_FAILURE_PATTERN.match(message) is not None
+        or _NO_RETURN_CODE_PATTERN.match(message) is not None
+    )
+
+
+def _display_command_execution_error(message: str) -> None:
+    """Display a CommandExecutionError message in structured format."""
+    typer.secho("✗ コマンド条件の実行エラー", fg=typer.colors.RED, bold=True)
+    typer.echo("")
+
+    m = _EXIT_CODE_PATTERN.match(message)
+    if m:
+        typer.echo(f"  コマンド: {m.group(1)}")
+        typer.echo(f"  終了コード: {m.group(2)}")
+        typer.echo(f"  原因: {m.group(3)}")
+        return
+
+    m = _TIMEOUT_PATTERN.match(message)
+    if m:
+        typer.echo(f"  コマンド: {m.group(1)}")
+        timeout_sec = m.group(2)
+        # Strip trailing ".0" for integer seconds
+        if timeout_sec.endswith(".0"):
+            timeout_sec = timeout_sec[:-2]
+        typer.echo(f"  タイムアウト: {timeout_sec}秒")
+        return
+
+    m = _START_FAILURE_PATTERN.match(message)
+    if m:
+        typer.echo(f"  コマンド: {m.group(1)}")
+        typer.echo(f"  原因: {m.group(2)}")
+        return
+
+    m = _NO_RETURN_CODE_PATTERN.match(message)
+    if m:
+        typer.echo(f"  コマンド: {m.group(1)}")
+        typer.echo("  終了コードなし（プロセスが異常終了した可能性があります）")
+        return
+
+    # Defensive fallback: display raw message if no pattern matched
+    typer.echo(f"  {message}")
 
 
 @app.callback()
@@ -380,6 +446,10 @@ def run(
                     typer.echo("    allowed_tools:")
                     for tool in sorted(set(allowed) | missing):
                         typer.echo(f'      - "{tool}"')
+            elif result.error_message and _is_command_execution_error(
+                result.error_message
+            ):
+                _display_command_execution_error(result.error_message)
             else:
                 typer.secho(
                     f"✗ エラー: {result.error_message}", fg=typer.colors.RED, bold=True
