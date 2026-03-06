@@ -4,8 +4,11 @@
 # このタスクは hachimoku レビュースコアを品質ゲートとして使うパターンの例です。
 # プログラミングタスクの実装品質を hachimoku スコアで客観的に評価します。
 #
-# 前提: hachimoku review をファイル指定で事前に実行し、JSONL ファイルが存在すること
-#   hachimoku review <file_path>
+# 前提:
+#   1. check_hachimoku_score.py を作業ディレクトリにコピーすること
+#      cp examples/check_hachimoku_score.py <作業ディレクトリ>/
+#   2. hachimoku review をファイル指定で事前に実行し、JSONL ファイルが存在すること
+#      hachimoku review <file_path>
 
 task: |
   FizzBuzz 関数を実装してテストを書いてください。
@@ -26,13 +29,14 @@ criteria:
     description: "FizzBuzz のテストが全パス"
     timeout: 30
   - type: command
-    command: "uv run python examples/check_hachimoku_score.py .hachimoku/reviews/files.jsonl --threshold 8.0"
+    command: "uv run python ./check_hachimoku_score.py .hachimoku/reviews/files.jsonl --threshold 8.0"
     description: "hachimoku レビュースコアが 8.0 以上"
 
 max_iterations: 10
 command_timeout: 60
 
 claude_options:
+  timeout: 600
   allowed_tools:
     - "Bash"
     - "Edit"
