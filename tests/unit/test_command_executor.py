@@ -1,9 +1,10 @@
 """Unit tests for CommandExecutor (T009, T018).
 
-T009 [US1]: happy path (exit code 0 -> met, non-zero -> not met),
-            error path (OSError -> CommandExecutionError, timeout -> CommandExecutionError),
+T009 [US1]: happy path (exit code 0 -> met, exit code 1 -> not met),
+            error path (OSError -> CommandExecutionError, timeout -> CommandExecutionError,
+            exit code 2+ -> CommandExecutionError),
             output truncation at COMMAND_OUTPUT_MAX_BYTES.
-T018 [US3]: exit code 127 warning log.
+T018 [US3]: exit code 2+ raises CommandExecutionError (POSIX convention).
 """
 
 from __future__ import annotations
@@ -199,13 +200,30 @@ class TestCommandExecutorOutputTruncation:
         assert "\ufffd" in result.stdout
 
 
-class TestCommandExecutorExitCode127:
-    """T018 [US3]: Exit code 127 warning log."""
+class TestCommandExecutorExitCodeError:
+    """T018 [US3]: Exit code 2+ raises CommandExecutionError (POSIX convention)."""
 
-    async def test_exit_code_127_logs_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Exit code 127 emits a warning log about command not found."""
+    async def test_exit_code_2_raises_error_with_details(self) -> None:
+        """Exit code 2 raises CommandExecutionError with exit code and stderr in message."""
+        mock_process = AsyncMock()
+        mock_process.communicate.return_value = (
+            b"",
+            b"can't open file 'script.py': [Errno 2] No such file or directory",
+        )
+        mock_process.returncode = 2
+
+        with patch(
+            "endless8.command.executor.asyncio.create_subprocess_shell",
+            return_value=mock_process,
+        ):
+            executor = CommandExecutor()
+            with pytest.raises(CommandExecutionError, match="exit code 2") as exc_info:
+                await executor.execute("python script.py", cwd="/tmp", timeout=10.0)
+
+        assert "No such file or directory" in str(exc_info.value)
+
+    async def test_exit_code_127_raises_error(self) -> None:
+        """Exit code 127 (command not found) raises CommandExecutionError."""
         mock_process = AsyncMock()
         mock_process.communicate.return_value = (
             b"",
@@ -218,35 +236,13 @@ class TestCommandExecutorExitCode127:
             return_value=mock_process,
         ):
             executor = CommandExecutor()
-            result = await executor.execute("no_such_cmd", cwd="/tmp", timeout=10.0)
+            with pytest.raises(CommandExecutionError, match="exit code 127"):
+                await executor.execute("no_such_cmd", cwd="/tmp", timeout=10.0)
 
-        assert result.exit_code == 127
-        assert any(
-            "exit code 127" in record.message and record.levelname == "WARNING"
-            for record in caplog.records
-        )
-
-    async def test_exit_code_127_is_not_an_error(self) -> None:
-        """Exit code 127 returns a result, does NOT raise CommandExecutionError."""
+    async def test_exit_code_1_returns_result(self) -> None:
+        """Exit code 1 (normal failure) returns CommandResult, not an error."""
         mock_process = AsyncMock()
-        mock_process.communicate.return_value = (b"", b"command not found")
-        mock_process.returncode = 127
-
-        with patch(
-            "endless8.command.executor.asyncio.create_subprocess_shell",
-            return_value=mock_process,
-        ):
-            executor = CommandExecutor()
-            result = await executor.execute("no_such_cmd", cwd="/tmp", timeout=10.0)
-
-        assert result.exit_code == 127
-
-    async def test_non_127_exit_code_no_warning(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Exit codes other than 127 do not emit a warning log."""
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (b"", b"error")
+        mock_process.communicate.return_value = (b"", b"condition not met")
         mock_process.returncode = 1
 
         with patch(
@@ -254,9 +250,9 @@ class TestCommandExecutorExitCode127:
             return_value=mock_process,
         ):
             executor = CommandExecutor()
-            await executor.execute("cmd", cwd="/tmp", timeout=10.0)
+            result = await executor.execute(
+                "grep pattern file", cwd="/tmp", timeout=10.0
+            )
 
-        warning_records = [
-            r for r in caplog.records if r.levelname == "WARNING" and "127" in r.message
-        ]
-        assert len(warning_records) == 0
+        assert result.exit_code == 1
+        assert result.stderr == "condition not met"

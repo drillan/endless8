@@ -556,13 +556,13 @@ class TestErrorScenarios:
         assert result.error_message is not None
         assert "timed out" in result.error_message
 
-    async def test_exit_code_127_treated_as_not_met(
+    async def test_exit_code_127_treated_as_error(
         self,
         mock_intake_agent: AsyncMock,
         mock_execution_agent: AsyncMock,
         mock_summary_agent: AsyncMock,
     ) -> None:
-        """Exit code 127 (command not found) → not met, NOT error."""
+        """Exit code 127 (command not found) → CommandExecutionError → ERROR."""
         config = EngineConfig(
             task="テスト",
             criteria=["条件"],
@@ -588,16 +588,47 @@ class TestErrorScenarios:
 
         result = await engine.run(task_input)
 
-        # NOT LoopStatus.ERROR - should be MAX_ITERATIONS
-        assert result.status == LoopStatus.MAX_ITERATIONS
-        assert result.final_judgment is not None
-        assert result.final_judgment.is_complete is False
+        assert result.status == LoopStatus.ERROR
+        assert result.error_message is not None
+        assert "exit code 127" in result.error_message
 
-        evals = result.final_judgment.evaluations
-        assert len(evals) == 1
-        assert evals[0].is_met is False
-        assert evals[0].command_result is not None
-        assert evals[0].command_result.exit_code == 127
+    async def test_exit_code_2_stops_loop(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Exit code 2 (e.g. script not found) → CommandExecutionError → ERROR."""
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+        )
+
+        task_input = TaskInput(
+            task="スクリプト不在テスト",
+            criteria=[
+                CommandCriterion(
+                    type="command",
+                    command="python nonexistent_script.py",
+                    description="存在しないスクリプト",
+                ),
+            ],
+            max_iterations=3,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.status == LoopStatus.ERROR
+        assert result.error_message is not None
+        assert "exit code" in result.error_message
+        # Should stop at iteration 1, not repeat 3 times
+        assert result.iterations_used == 1
 
     async def test_first_error_stops_remaining_commands(
         self,
