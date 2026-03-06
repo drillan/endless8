@@ -29,6 +29,8 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 | `ci-pipeline.yaml` | CI パイプラインタスク（コマンド条件のみ） |
 | `code-quality.yaml` | コード品質改善タスク（意味的 + コマンド混在条件） |
 | `database-migration.yaml` | DB マイグレーションタスク（混在条件の実践例） |
+| `hachimoku-quality-gate.yaml` | hachimoku 品質ゲートタスク（スコアチェック連携） |
+| `check_hachimoku_score.py` | hachimoku レビュースコアチェッカー（コマンド条件用） |
 
 ## CLI オプション一覧
 

@@ -20,7 +20,7 @@ criteria:
   - type: command
     command: "uv run pytest --tb=short -q"
     description: "全テストがパス"
-    timeout: 120  # テスト実行は時間がかかるため個別タイムアウトを設定
+    timeout: 600  # テスト実行は時間がかかるため個別タイムアウトを設定
 
 max_iterations: 10
 

@@ -1,0 +1,42 @@
+# hachimoku 品質ゲートタスクの設定ファイル例（コマンド条件 + 意味的条件の混在）
+# 使用方法: e8 run --config examples/hachimoku-quality-gate.yaml
+#
+# このタスクは hachimoku レビュースコアを品質ゲートとして使うパターンの例です。
+# プログラミングタスクの実装品質を hachimoku スコアで客観的に評価します。
+#
+# 前提: hachimoku review をファイル指定で事前に実行し、JSONL ファイルが存在すること
+#   hachimoku review <file_path>
+
+task: |
+  FizzBuzz 関数を実装してテストを書いてください。
+
+  要件:
+  - fizzbuzz(n: int) -> str を実装
+  - 3の倍数: "Fizz", 5の倍数: "Buzz", 両方の倍数: "FizzBuzz", それ以外: 数字の文字列
+  - tests/test_fizzbuzz.py にテストを作成
+  - 境界値テスト（1, 3, 5, 15, 100）を含むこと
+
+criteria:
+  # 意味的条件（LLM が判定）
+  - "fizzbuzz 関数が正しく実装されている"
+  - "テストファイルに境界値テストが含まれている"
+  # コマンド条件（終了コードで判定）
+  - type: command
+    command: "uv run pytest tests/test_fizzbuzz.py -v"
+    description: "FizzBuzz のテストが全パス"
+    timeout: 30
+  - type: command
+    command: "uv run python examples/check_hachimoku_score.py .hachimoku/reviews/files.jsonl --threshold 8.0"
+    description: "hachimoku レビュースコアが 8.0 以上"
+
+max_iterations: 10
+command_timeout: 60
+
+claude_options:
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Read"
+    - "Write"
