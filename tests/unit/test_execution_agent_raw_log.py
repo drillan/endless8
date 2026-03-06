@@ -45,6 +45,7 @@ class TestExecutionAgentRawLog:
             iteration=1,
             history_context="none",
             knowledge_context="none",
+            working_directory="/tmp/test",
         )
 
         with patch("endless8.agents.execution.create_agent_model") as mock_factory:
@@ -80,6 +81,7 @@ class TestExecutionAgentRawLog:
             iteration=1,
             history_context="none",
             knowledge_context="none",
+            working_directory="/tmp/test",
         )
 
         with patch("endless8.agents.execution.create_agent_model") as mock_factory:

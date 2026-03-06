@@ -20,6 +20,7 @@ class TestExecutionAgent:
             iteration=1,
             history_context="前回の履歴なし",
             knowledge_context="関連するナレッジなし",
+            working_directory="/tmp/test-workspace",
         )
 
     async def test_execution_agent_returns_result(
@@ -117,6 +118,7 @@ class TestExecutionAgent:
             iteration=3,
             history_context="Iteration 1: 認証機能を追加\nIteration 2: テスト追加",
             knowledge_context="パターン: テストファースト",
+            working_directory="/tmp/test-workspace",
         )
 
         with patch("endless8.agents.execution.Agent") as mock_agent_class:
@@ -293,6 +295,7 @@ class TestExecutionAgentMaxTurns:
             iteration=1,
             history_context="なし",
             knowledge_context="なし",
+            working_directory="/tmp/test-workspace",
         )
 
     async def test_max_turns_custom_value(
@@ -354,6 +357,41 @@ class TestExecutionAgentMaxTurns:
             assert call_kwargs.kwargs.get("max_turns") == 50
 
 
+class TestWorkingDirectoryPrompt:
+    """Tests for working_directory in prompt generation."""
+
+    async def test_prompt_includes_working_directory(self) -> None:
+        """Test that prompt includes working directory section."""
+        from endless8.agents.execution import ExecutionAgent
+
+        context = ExecutionContext(
+            task="ファイルを作成",
+            criteria=["ファイルが存在する"],
+            iteration=1,
+            history_context="履歴なし",
+            knowledge_context="ナレッジなし",
+            working_directory="/home/user/project",
+        )
+
+        agent = ExecutionAgent()
+        prompt = agent._build_prompt(context)
+
+        assert "作業ディレクトリ" in prompt
+        assert "/home/user/project" in prompt
+
+    async def test_execution_context_requires_working_directory(self) -> None:
+        """Test that ExecutionContext requires working_directory field."""
+        context = ExecutionContext(
+            task="テスト",
+            criteria=["条件"],
+            iteration=1,
+            history_context="なし",
+            knowledge_context="なし",
+            working_directory="/tmp/test",
+        )
+        assert context.working_directory == "/tmp/test"
+
+
 class TestRawOutputContextPrompt:
     """Tests for raw_output_context in prompt generation."""
 
@@ -367,6 +405,7 @@ class TestRawOutputContextPrompt:
             iteration=2,
             history_context="履歴",
             knowledge_context="ナレッジ",
+            working_directory="/tmp/test-workspace",
             raw_output_context="前回の出力テキスト",
         )
 
@@ -386,6 +425,7 @@ class TestRawOutputContextPrompt:
             iteration=1,
             history_context="履歴",
             knowledge_context="ナレッジ",
+            working_directory="/tmp/test-workspace",
         )
 
         agent = ExecutionAgent()
