@@ -9,6 +9,7 @@ The Judgment Agent is responsible for:
 import asyncio
 import logging
 
+from claudecode_model.exceptions import CLIExecutionError
 from pydantic_ai import Agent
 
 from endless8.agents import JudgmentContext
@@ -164,36 +165,28 @@ class JudgmentAgent:
                 result = await agent.run(prompt)
                 return result.output
 
-            except Exception as e:
-                last_error = e
-                error_msg = str(e)
-
-                # Check if this is a retriable CLI error
-                if (
-                    "Command failed with exit code" in error_msg
-                    or "message reader" in error_msg.lower()
-                ):
-                    remaining = self._max_retries - attempt - 1
-                    if remaining > 0:
-                        logger.warning(
-                            "JudgmentAgent CLI error (attempt %d/%d), retrying in %.1fs: %s",
-                            attempt + 1,
-                            self._max_retries,
-                            self._retry_delay,
-                            error_msg[:200],
-                        )
-                        await asyncio.sleep(self._retry_delay)
-                        continue
-                    else:
-                        logger.error(
-                            "JudgmentAgent CLI error (attempt %d/%d), no more retries: %s",
-                            attempt + 1,
-                            self._max_retries,
-                            error_msg[:200],
-                        )
-                else:
-                    # Non-retriable error, raise immediately
+            except CLIExecutionError as e:
+                if not e.recoverable:
                     raise
+                last_error = e
+                remaining = self._max_retries - attempt - 1
+                if remaining > 0:
+                    logger.warning(
+                        "JudgmentAgent CLI error (attempt %d/%d), retrying in %.1fs: %s",
+                        attempt + 1,
+                        self._max_retries,
+                        self._retry_delay,
+                        str(e)[:200],
+                    )
+                    await asyncio.sleep(self._retry_delay)
+                    continue
+                else:
+                    logger.error(
+                        "JudgmentAgent CLI error (attempt %d/%d), no more retries: %s",
+                        attempt + 1,
+                        self._max_retries,
+                        str(e)[:200],
+                    )
 
         # All retries exhausted
         if last_error is not None:
