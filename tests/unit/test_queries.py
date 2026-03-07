@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from duckdb import Error as DuckDBError
 
 from endless8.history.queries import (
     count_iterations,
@@ -123,11 +124,10 @@ class TestQueryHistoryContext:
 
         assert summaries == []
 
-    def test_returns_empty_for_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
-        """Should return empty list when DuckDB query fails."""
-        summaries = query_history_context(invalid_history_jsonl, limit=5)
-
-        assert summaries == []
+    def test_raises_on_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
+        """Should raise DuckDBError when JSONL is invalid."""
+        with pytest.raises(DuckDBError):
+            query_history_context(invalid_history_jsonl, limit=5)
 
     def test_returns_correct_execution_status(self, valid_history_jsonl: Path) -> None:
         """Should correctly parse execution status enum."""
@@ -176,11 +176,10 @@ class TestQueryFailures:
 
         assert failures == []
 
-    def test_returns_empty_for_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
-        """Should return empty list when DuckDB query fails."""
-        failures = query_failures(invalid_history_jsonl)
-
-        assert failures == []
+    def test_raises_on_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
+        """Should raise DuckDBError when JSONL is invalid."""
+        with pytest.raises(DuckDBError):
+            query_failures(invalid_history_jsonl)
 
 
 class TestCountIterations:
@@ -205,11 +204,10 @@ class TestCountIterations:
 
         assert count == 0
 
-    def test_returns_zero_for_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
-        """Should return 0 when DuckDB query fails."""
-        count = count_iterations(invalid_history_jsonl)
-
-        assert count == 0
+    def test_raises_on_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
+        """Should raise DuckDBError when JSONL is invalid."""
+        with pytest.raises(DuckDBError):
+            count_iterations(invalid_history_jsonl)
 
 
 class TestGetLastIteration:
@@ -234,11 +232,10 @@ class TestGetLastIteration:
 
         assert last_iter == 0
 
-    def test_returns_zero_for_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
-        """Should return 0 when DuckDB query fails."""
-        last_iter = get_last_iteration(invalid_history_jsonl)
-
-        assert last_iter == 0
+    def test_raises_on_invalid_jsonl(self, invalid_history_jsonl: Path) -> None:
+        """Should raise DuckDBError when JSONL is invalid."""
+        with pytest.raises(DuckDBError):
+            get_last_iteration(invalid_history_jsonl)
 
 
 class TestTimestampHandling:

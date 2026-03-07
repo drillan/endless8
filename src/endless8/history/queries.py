@@ -31,7 +31,7 @@ def query_history_context(
         List of ExecutionSummary objects.
     """
     path = Path(history_path)
-    if not path.exists():
+    if not path.exists() or path.stat().st_size == 0:
         return []
 
     query = """
@@ -49,37 +49,31 @@ def query_history_context(
 
     try:
         result = duckdb.execute(query, [str(path), limit]).fetchall()
-        summaries = []
-        for row in result:
-            iteration, approach, result_status, reason, artifacts, timestamp = row
-            # Convert datetime to ISO string if needed
-            if isinstance(timestamp, datetime):
-                timestamp_str = timestamp.isoformat()
-            else:
-                timestamp_str = str(timestamp) if timestamp else ""
-            summary = ExecutionSummary(
-                iteration=iteration,
-                approach=approach,
-                result=ExecutionStatus(result_status),
-                reason=reason,
-                artifacts=artifacts if artifacts else [],
-                timestamp=timestamp_str,
-            )
-            summaries.append(summary)
-        return summaries
     except DuckDBError as e:
         logger.error(
             "DuckDB query failed in query_history_context (path: %s): %s",
             path,
             e,
         )
-        return []
-    except Exception:
-        logger.exception(
-            "Unexpected error in query_history_context (path: %s)",
-            path,
+        raise
+
+    summaries = []
+    for row in result:
+        iteration, approach, result_status, reason, artifacts, timestamp = row
+        if isinstance(timestamp, datetime):
+            timestamp_str = timestamp.isoformat()
+        else:
+            timestamp_str = str(timestamp) if timestamp else ""
+        summary = ExecutionSummary(
+            iteration=iteration,
+            approach=approach,
+            result=ExecutionStatus(result_status),
+            reason=reason,
+            artifacts=artifacts if artifacts else [],
+            timestamp=timestamp_str,
         )
-        return []
+        summaries.append(summary)
+    return summaries
 
 
 def query_failures(
@@ -96,7 +90,7 @@ def query_failures(
         List of failed ExecutionSummary objects.
     """
     path = Path(history_path)
-    if not path.exists():
+    if not path.exists() or path.stat().st_size == 0:
         return []
 
     exclude = exclude_iterations or []
@@ -128,37 +122,31 @@ def query_failures(
 
     try:
         result = duckdb.execute(query, params).fetchall()
-        summaries = []
-        for row in result:
-            iteration, approach, result_status, reason, artifacts, timestamp = row
-            # Convert datetime to ISO string if needed
-            if isinstance(timestamp, datetime):
-                timestamp_str = timestamp.isoformat()
-            else:
-                timestamp_str = str(timestamp) if timestamp else ""
-            summary = ExecutionSummary(
-                iteration=iteration,
-                approach=approach,
-                result=ExecutionStatus(result_status),
-                reason=reason,
-                artifacts=artifacts if artifacts else [],
-                timestamp=timestamp_str,
-            )
-            summaries.append(summary)
-        return summaries
     except DuckDBError as e:
         logger.error(
             "DuckDB query failed in query_failures (path: %s): %s",
             path,
             e,
         )
-        return []
-    except Exception:
-        logger.exception(
-            "Unexpected error in query_failures (path: %s)",
-            path,
+        raise
+
+    summaries = []
+    for row in result:
+        iteration, approach, result_status, reason, artifacts, timestamp = row
+        if isinstance(timestamp, datetime):
+            timestamp_str = timestamp.isoformat()
+        else:
+            timestamp_str = str(timestamp) if timestamp else ""
+        summary = ExecutionSummary(
+            iteration=iteration,
+            approach=approach,
+            result=ExecutionStatus(result_status),
+            reason=reason,
+            artifacts=artifacts if artifacts else [],
+            timestamp=timestamp_str,
         )
-        return []
+        summaries.append(summary)
+    return summaries
 
 
 def count_iterations(history_path: str | Path) -> int:
@@ -171,7 +159,7 @@ def count_iterations(history_path: str | Path) -> int:
         Number of iterations.
     """
     path = Path(history_path)
-    if not path.exists():
+    if not path.exists() or path.stat().st_size == 0:
         return 0
 
     query = """
@@ -182,20 +170,15 @@ def count_iterations(history_path: str | Path) -> int:
 
     try:
         result = duckdb.execute(query, [str(path)]).fetchone()
-        return result[0] if result else 0
     except DuckDBError as e:
         logger.error(
             "DuckDB query failed in count_iterations (path: %s): %s",
             path,
             e,
         )
-        return 0
-    except Exception:
-        logger.exception(
-            "Unexpected error in count_iterations (path: %s)",
-            path,
-        )
-        return 0
+        raise
+
+    return result[0] if result else 0
 
 
 def get_last_iteration(history_path: str | Path) -> int:
@@ -208,7 +191,7 @@ def get_last_iteration(history_path: str | Path) -> int:
         Last iteration number (0 if no history).
     """
     path = Path(history_path)
-    if not path.exists():
+    if not path.exists() or path.stat().st_size == 0:
         return 0
 
     query = """
@@ -219,20 +202,15 @@ def get_last_iteration(history_path: str | Path) -> int:
 
     try:
         result = duckdb.execute(query, [str(path)]).fetchone()
-        return result[0] if result and result[0] else 0
     except DuckDBError as e:
         logger.error(
             "DuckDB query failed in get_last_iteration (path: %s): %s",
             path,
             e,
         )
-        return 0
-    except Exception:
-        logger.exception(
-            "Unexpected error in get_last_iteration (path: %s)",
-            path,
-        )
-        return 0
+        raise
+
+    return result[0] if result and result[0] else 0
 
 
 __all__ = [
