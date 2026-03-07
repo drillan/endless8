@@ -34,6 +34,9 @@ class ExecutionContext(BaseModel):
     raw_output_context: str | None = Field(
         None, description="前回イテレーション（またはresume元）の生出力"
     )
+    suggested_next_action: str | None = Field(
+        None, description="前回の判定エージェントからの次のアクション提案"
+    )
 
 
 class JudgmentContext(BaseModel):

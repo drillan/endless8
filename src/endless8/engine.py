@@ -128,6 +128,7 @@ class Engine:
         self._knowledge: list[Knowledge] = []
         self._start_iteration = 1  # For resume support
         self._previous_output: str | None = None
+        self._previous_suggested_next_action: str | None = None
 
     async def _initialize_from_history(self) -> None:
         """Initialize iteration counter from history for resume support."""
@@ -651,6 +652,7 @@ class Engine:
                     raw_output_context=self._previous_output
                     if self._should_track_raw_output
                     else None,
+                    suggested_next_action=self._previous_suggested_next_action,
                 )
 
                 # Execute
@@ -722,6 +724,11 @@ class Engine:
                 # Save judgment to history
                 if self._history_store:
                     await self._history_store.append_judgment(final_judgment, iteration)
+
+                # Pass judgment feedback to next iteration
+                self._previous_suggested_next_action = (
+                    final_judgment.suggested_next_action
+                )
 
                 if final_judgment.is_complete:
                     self._is_running = False
@@ -860,6 +867,7 @@ class Engine:
                     raw_output_context=self._previous_output
                     if self._should_track_raw_output
                     else None,
+                    suggested_next_action=self._previous_suggested_next_action,
                 )
 
                 # Execute
@@ -909,6 +917,9 @@ class Engine:
                 # Save judgment to history
                 if self._history_store:
                     await self._history_store.append_judgment(judgment, iteration)
+
+                # Pass judgment feedback to next iteration
+                self._previous_suggested_next_action = judgment.suggested_next_action
 
                 if judgment.is_complete:
                     self._is_running = False

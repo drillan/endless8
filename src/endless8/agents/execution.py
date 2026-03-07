@@ -147,6 +147,11 @@ class ExecutionAgent:
 ## 関連するナレッジ
 {context.knowledge_context}
 """
+        if context.suggested_next_action is not None:
+            prompt += f"""
+## 前回の判定フィードバック
+{context.suggested_next_action}
+"""
         if context.raw_output_context is not None:
             prompt += f"""
 ## 前回の生出力
