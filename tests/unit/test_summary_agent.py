@@ -797,16 +797,16 @@ class TestBuildPrompt:
         assert "新発見" in prompt
 
 
-class TestSummaryAgentLLMFallback:
-    """Tests for SummaryAgent LLM failure fallback."""
+class TestSummaryAgentLLMFailurePropagation:
+    """Tests for SummaryAgent LLM failure exception propagation."""
 
-    async def test_llm_failure_returns_fallback_summary(self) -> None:
-        """Test that LLM failure returns a fallback summary with empty knowledge."""
+    async def test_llm_failure_propagates_runtime_error(self) -> None:
+        """Test that RuntimeError from LLM is propagated without suppression."""
         from endless8.agents.summary import SummaryAgent
 
         execution_result = ExecutionResult(
             status=ExecutionStatus.SUCCESS,
-            output="実行結果のテキスト" * 100,
+            output="実行結果のテキスト",
             artifacts=["file1.py"],
         )
 
@@ -824,33 +824,18 @@ class TestSummaryAgentLLMFallback:
             mock_agent_cls.return_value = mock_agent_instance
 
             agent = SummaryAgent(task_description="テスト", model_name="test-model")
-            summary, knowledge_list = await agent.run(
-                execution_result, iteration=2, criteria=["条件"]
-            )
+            with pytest.raises(RuntimeError, match="LLM connection failed"):
+                await agent.run(execution_result, iteration=2, criteria=["条件"])
 
-            assert isinstance(summary, ExecutionSummary)
-            assert summary.iteration == 2
-            assert summary.approach == "LLM summarization failed"
-            assert summary.result == ExecutionStatus.SUCCESS
-            assert len(summary.reason) <= 500
-            assert knowledge_list == []
-
-    async def test_llm_failure_preserves_metadata(self) -> None:
-        """Test that LLM failure still preserves mechanical metadata."""
+    async def test_llm_failure_propagates_generic_exception(self) -> None:
+        """Test that generic Exception from LLM is propagated without suppression."""
         from endless8.agents.summary import SummaryAgent
 
         execution_result = ExecutionResult(
             status=ExecutionStatus.FAILURE,
             output="テスト失敗",
             artifacts=["src/main.py"],
-            semantic_metadata=SemanticMetadata(
-                approach="アプローチ",
-                strategy_tags=["tag1"],
-                discoveries=[],
-            ),
         )
-
-        raw_log = '{"type":"tool_use","name":"Read","input":{"path":"src/main.py"}}\n{"usage":{"input_tokens":50,"output_tokens":25}}'
 
         with (
             patch("endless8.agents.summary.Agent") as mock_agent_cls,
@@ -864,18 +849,12 @@ class TestSummaryAgentLLMFallback:
             mock_agent_cls.return_value = mock_agent_instance
 
             agent = SummaryAgent(task_description="テスト", model_name="test-model")
-            summary, knowledge_list = await agent.run(
-                execution_result,
-                iteration=1,
-                criteria=["条件"],
-                raw_log_content=raw_log,
-            )
-
-            # Metadata should still be extracted from raw log
-            assert "Read" in summary.metadata.tools_used
-            assert summary.metadata.tokens_used == 75
-            assert summary.metadata.strategy_tags == ["tag1"]
-            assert knowledge_list == []
+            with pytest.raises(Exception, match="timeout"):
+                await agent.run(
+                    execution_result,
+                    iteration=1,
+                    criteria=["条件"],
+                )
 
 
 class TestKnowledgeEntryLiteralValidation:

@@ -278,22 +278,8 @@ class SummaryAgent:
             system_prompt=SUMMARY_SYSTEM_PROMPT,
         )
 
-        try:
-            llm_result = await agent.run(prompt)
-            llm_output: SummaryLLMOutput = llm_result.output
-        except Exception:
-            logger.exception("LLM summarization failed, using fallback summary")
-            summary = ExecutionSummary(
-                iteration=iteration,
-                approach="LLM summarization failed",
-                result=execution_result.status,
-                reason=execution_result.output[:500],
-                artifacts=execution_result.artifacts,
-                metadata=metadata,
-                next=None,
-                timestamp=datetime.now(UTC).isoformat(),
-            )
-            return summary, []
+        llm_result = await agent.run(prompt)
+        llm_output: SummaryLLMOutput = llm_result.output
 
         # 3. Build next action from LLM output
         next_action: NextAction | None = None
