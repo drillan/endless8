@@ -234,3 +234,7 @@ debug.log
 
 # issue-workflow
 /.issue-workflow/
+
+# grain
+.grain.toml
+.grain-worklog.json
