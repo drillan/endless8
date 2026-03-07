@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 # Retry configuration for CLI errors
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_RETRY_DELAY = 2.0  # seconds
+# Retry configuration for output validation errors (pydantic-ai)
+DEFAULT_RESULT_RETRIES = 3
 
 DEFAULT_JUDGMENT_PROMPT = """あなたは判定エージェントです。
 
@@ -31,6 +33,12 @@ DEFAULT_JUDGMENT_PROMPT = """あなたは判定エージェントです。
 2. 判定の根拠を具体的に説明する
 3. 確信度（0.0-1.0）を設定する
 4. 未完了の場合は次のアクションを提案する
+
+## コマンド条件について（重要）
+- コマンド条件はエンジンが自動的に評価済みです。あなたは意味的条件のみを評価してください
+- コマンド条件の判定結果が提供される場合がありますが、これは参考情報です
+- コマンド条件の evaluation を出力に含めないでください
+- evaluation_method が "command" の場合、confidence は必ず 1.0 にしてください（終了コードは確定的であり曖昧さがないため）
 
 ## 重要
 - 曖昧な場合は厳しく判定する
@@ -61,6 +69,7 @@ class JudgmentAgent:
         max_turns: int = 10,
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_delay: float = DEFAULT_RETRY_DELAY,
+        result_retries: int = DEFAULT_RESULT_RETRIES,
     ) -> None:
         """Initialize the judgment agent.
 
@@ -70,6 +79,7 @@ class JudgmentAgent:
             max_turns: Maximum number of turns for the agent.
             max_retries: Maximum number of retries on CLI errors.
             retry_delay: Delay in seconds between retries.
+            result_retries: Maximum number of retries for output validation errors.
         """
         if max_turns < 1:
             raise ValueError(f"max_turns must be >= 1, got {max_turns}")
@@ -78,6 +88,7 @@ class JudgmentAgent:
         self._max_turns = max_turns
         self._max_retries = max_retries
         self._retry_delay = retry_delay
+        self._result_retries = result_retries
         self._agent: Agent[None, JudgmentResult] | None = None
 
     def _build_prompt(self, context: JudgmentContext) -> str:
@@ -114,7 +125,12 @@ class JudgmentAgent:
 
         # FR-007: Include command results as additional context for semantic judgment
         if context.command_results:
-            lines = ["## コマンド条件判定結果", ""]
+            lines = [
+                "## コマンド条件判定結果（参考情報・評価済み）",
+                "",
+                "以下は既に評価済みのコマンド条件です。あなたの出力に含めないでください。",
+                "",
+            ]
             for cr in context.command_results:
                 status = "✅ met" if cr.is_met else "❌ not met"
                 lines.append(f"- **{cr.description}** (`{cr.command}`): {status}")
@@ -160,6 +176,7 @@ class JudgmentAgent:
                     model,
                     output_type=JudgmentResult,
                     system_prompt=system_prompt,
+                    retries=self._result_retries,
                 )
 
                 result = await agent.run(prompt)
