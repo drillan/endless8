@@ -1214,3 +1214,142 @@ class TestJudgmentAgentRetryOnCLIExecutionError:
                 await agent.run(judgment_context)
 
             assert mock_agent.run.call_count == 1
+
+
+# --- Issue #49: Command confidence crash fix ---
+
+
+class TestJudgmentPromptCommandConfidenceInstruction:
+    """Tests for prompt instructions preventing command confidence < 1.0 (#49)."""
+
+    @pytest.fixture
+    def execution_summary(self) -> ExecutionSummary:
+        return ExecutionSummary(
+            iteration=1,
+            approach="実装",
+            result=ExecutionStatus.SUCCESS,
+            reason="完了",
+            artifacts=[],
+            metadata=SummaryMetadata(),
+            timestamp="2026-03-07T10:00:00Z",
+        )
+
+    def test_system_prompt_includes_command_confidence_instruction(self) -> None:
+        """DEFAULT_JUDGMENT_PROMPT must instruct that command confidence is always 1.0."""
+        from endless8.agents.judgment import DEFAULT_JUDGMENT_PROMPT
+
+        assert "1.0" in DEFAULT_JUDGMENT_PROMPT
+        assert (
+            "command" in DEFAULT_JUDGMENT_PROMPT.lower()
+            or "コマンド" in DEFAULT_JUDGMENT_PROMPT
+        )
+
+    def test_system_prompt_instructs_not_to_evaluate_command_criteria(self) -> None:
+        """DEFAULT_JUDGMENT_PROMPT must instruct not to evaluate command criteria."""
+        from endless8.agents.judgment import DEFAULT_JUDGMENT_PROMPT
+
+        # The prompt should mention that command criteria are already evaluated
+        assert "コマンド条件" in DEFAULT_JUDGMENT_PROMPT
+
+    def test_build_prompt_includes_command_context_warning(
+        self,
+        execution_summary: ExecutionSummary,
+    ) -> None:
+        """_build_prompt should include warning that command results are context-only."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        context = JudgmentContext(
+            task="テスト",
+            criteria=["コードが読みやすい"],
+            execution_summary=execution_summary,
+            command_results=[
+                CommandCriterionResult(
+                    criterion_index=0,
+                    description="pytest パス",
+                    command="pytest",
+                    is_met=True,
+                    result=CommandResult(
+                        exit_code=0, stdout="ok", stderr="", execution_time_sec=1.0
+                    ),
+                ),
+            ],
+        )
+
+        agent = JudgmentAgent()
+        prompt = agent._build_prompt(context)
+
+        # Prompt must include instruction that command results are already evaluated
+        assert "参考情報" in prompt or "コンテキスト" in prompt or "評価済み" in prompt
+
+
+class TestJudgmentAgentResultRetries:
+    """Tests for result_retries parameter on JudgmentAgent (#49)."""
+
+    @pytest.fixture
+    def judgment_context(self) -> JudgmentContext:
+        return JudgmentContext(
+            task="テスト",
+            criteria=["条件"],
+            execution_summary=ExecutionSummary(
+                iteration=1,
+                approach="アプローチ",
+                result=ExecutionStatus.SUCCESS,
+                reason="理由",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-03-07T10:00:00Z",
+            ),
+        )
+
+    @pytest.fixture
+    def success_result(self) -> JudgmentResult:
+        return JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="条件",
+                    is_met=True,
+                    evidence="証拠",
+                    confidence=0.9,
+                )
+            ],
+            overall_reason="完了",
+        )
+
+    def test_result_retries_default_value(self) -> None:
+        """JudgmentAgent should have result_retries default of 3."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        agent = JudgmentAgent()
+        assert agent._result_retries == 3
+
+    def test_result_retries_custom_value(self) -> None:
+        """JudgmentAgent should accept custom result_retries."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        agent = JudgmentAgent(result_retries=5)
+        assert agent._result_retries == 5
+
+    async def test_result_retries_passed_to_pydantic_agent(
+        self,
+        judgment_context: JudgmentContext,
+        success_result: JudgmentResult,
+    ) -> None:
+        """result_retries should be passed to pydantic-ai Agent constructor."""
+        from endless8.agents.judgment import JudgmentAgent
+
+        with patch("endless8.agents.judgment.Agent") as mock_agent_class:
+            mock_agent = AsyncMock()
+            mock_agent.run.return_value = MagicMock(output=success_result)
+            mock_agent_class.return_value = mock_agent
+
+            with patch("endless8.agents.judgment.create_agent_model") as mock_model:
+                mock_model.return_value = "mock_model"
+
+                agent = JudgmentAgent(result_retries=5)
+                await agent.run(judgment_context)
+
+                # Verify Agent was created with retries parameter
+                mock_agent_class.assert_called_once()
+                call_kwargs = mock_agent_class.call_args
+                assert call_kwargs.kwargs.get("retries") == 5
