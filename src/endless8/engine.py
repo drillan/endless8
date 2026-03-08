@@ -405,13 +405,26 @@ class Engine:
         merged_evaluations = command_evaluations + semantic_judgment.evaluations
         all_met = all(e.is_met for e in merged_evaluations)
 
+        # Determine suggested_next_action (#53):
+        # When command criteria fail but semantic judgment has no suggestion,
+        # auto-generate from failed command descriptions
+        suggested_next_action: str | None = None
+        if not all_met:
+            suggested_next_action = semantic_judgment.suggested_next_action
+            if not suggested_next_action:
+                failed_commands = [e for e in command_evaluations if not e.is_met]
+                if failed_commands:
+                    descriptions = [f"- {e.criterion}" for e in failed_commands]
+                    suggested_next_action = (
+                        "以下のコマンド条件が未達成です。根本的に異なるアプローチを検討してください:\n"
+                        + "\n".join(descriptions)
+                    )
+
         return JudgmentResult(
             is_complete=all_met,
             evaluations=merged_evaluations,
             overall_reason=semantic_judgment.overall_reason,
-            suggested_next_action=semantic_judgment.suggested_next_action
-            if not all_met
-            else None,
+            suggested_next_action=suggested_next_action,
         )
 
     async def _get_history_context(self) -> str:
