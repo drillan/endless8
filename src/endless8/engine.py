@@ -354,6 +354,8 @@ class Engine:
                a. No semantic criteria -> _build_judgment_result_from_commands (FR-010)
                b. Semantic criteria exist -> JudgmentAgent.run() with command_results
             3. Merge command evaluations + semantic evaluations into unified JudgmentResult
+            4. Determine suggested_next_action: use semantic judgment's suggestion,
+               or auto-generate from failed command descriptions if absent (#53)
 
         Args:
             task_input: Task input with criteria.
