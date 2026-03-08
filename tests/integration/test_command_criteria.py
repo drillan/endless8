@@ -420,6 +420,121 @@ class TestMixedCriteria:
         assert len(cmd_evals) == 1
         assert cmd_evals[0].is_met is False
 
+    async def test_mixed_command_not_met_semantic_met_generates_suggested_action(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """Command not met + semantic met → suggested_next_action auto-generated (#53)."""
+        mock_judgment = AsyncMock()
+        mock_judgment.run.return_value = JudgmentResult(
+            is_complete=True,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="コードが読みやすい",
+                    is_met=True,
+                    evidence="OK",
+                    confidence=0.9,
+                ),
+            ],
+            overall_reason="意味的条件達成",
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment,
+        )
+
+        task_input = TaskInput(
+            task="パフォーマンス最適化",
+            criteria=[
+                "コードが読みやすい",
+                CommandCriterion(
+                    type="command",
+                    command="false",
+                    description="generate_primes(10_000_000) が0.2秒以内",
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is False
+        # suggested_next_action must NOT be None when command criteria fail
+        assert result.final_judgment.suggested_next_action is not None
+        assert (
+            "generate_primes(10_000_000) が0.2秒以内"
+            in result.final_judgment.suggested_next_action
+        )
+
+    async def test_mixed_command_not_met_preserves_semantic_suggested_action(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+    ) -> None:
+        """When semantic judgment already has suggested_next_action, preserve it (#53)."""
+        mock_judgment = AsyncMock()
+        mock_judgment.run.return_value = JudgmentResult(
+            is_complete=False,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="コードが読みやすい",
+                    is_met=False,
+                    evidence="可読性不足",
+                    confidence=0.8,
+                ),
+            ],
+            overall_reason="意味的条件未達成",
+            suggested_next_action="変数名をリファクタリングしてください",
+        )
+
+        config = EngineConfig(
+            task="テスト",
+            criteria=["条件"],
+        )
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment,
+        )
+
+        task_input = TaskInput(
+            task="パフォーマンス最適化",
+            criteria=[
+                "コードが読みやすい",
+                CommandCriterion(
+                    type="command",
+                    command="false",
+                    description="テスト通過",
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        result = await engine.run(task_input)
+
+        assert result.final_judgment is not None
+        assert result.final_judgment.is_complete is False
+        # Semantic judgment's suggested_next_action should be preserved
+        assert result.final_judgment.suggested_next_action is not None
+        assert (
+            "変数名をリファクタリングしてください"
+            in result.final_judgment.suggested_next_action
+        )
+
     async def test_mixed_semantic_only_criteria_passes(
         self,
         mock_intake_agent: AsyncMock,
