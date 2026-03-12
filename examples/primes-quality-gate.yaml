@@ -1,0 +1,62 @@
+# 高速素数生成タスクの設定ファイル例（コマンド条件 + 意味的条件の混在）
+# 使用方法: e8 run --config examples/primes-quality-gate.yaml
+#
+# パフォーマンス基準 + mypy strict + テスト全パスの複合条件により、
+# 複数イテレーションが必要になるタスクの例です。
+
+task: |
+  高速な素数生成モジュールを実装してください。
+
+  要件:
+  - primes.py に実装
+  - generate_primes(n: int) -> list[int]: n以下の全素数をリストで返す
+  - is_prime(n: int) -> bool: 素数判定
+  - nth_prime(n: int) -> int: n番目の素数を返す（1-indexed）
+  - エラトステネスの篩またはそれ以上のアルゴリズムを使用
+  - 外部ライブラリ（numpy等）の使用禁止、標準ライブラリのみ使用すること
+  - n <= 0 の場合は ValueError を送出
+  - tests/test_primes.py にテストを作成
+
+  テストケース:
+  - generate_primes(30) -> [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+  - is_prime(1) -> False, is_prime(2) -> True, is_prime(997) -> True
+  - nth_prime(1) -> 2, nth_prime(100) -> 541
+  - n <= 0 で ValueError
+  - generate_primes(1) -> []
+  - generate_primes(2) -> [2]
+  - パフォーマンス: generate_primes(10_000_000) が 0.25秒以内
+
+criteria:
+  # 意味的条件（LLM が判定）
+  - "エラトステネスの篩またはそれ以上のアルゴリズムが使用されている"
+  - "n <= 0 で ValueError が送出される"
+  # コマンド条件（終了コードで判定）
+  - type: command
+    command: "uv run pytest tests/test_primes.py -v"
+    description: "テストが全パス"
+    timeout: 30
+  - type: command
+    command: "uv run python -c \"import time; from primes import generate_primes; s=time.time(); generate_primes(10_000_000); elapsed=time.time()-s; print(f'{elapsed:.3f}s'); assert elapsed < 0.25, f'Too slow: {elapsed:.3f}s'\""
+    description: "generate_primes(10_000_000) が0.25秒以内"
+    timeout: 10
+  - type: command
+    command: "uv run mypy primes.py --strict"
+    description: "mypy strict が通る"
+    timeout: 30
+  - type: command
+    command: "uv run python -c \"import primes, inspect; src=inspect.getsource(primes); assert 'import numpy' not in src and 'import np' not in src and 'from numpy' not in src, 'External libraries are not allowed'\""
+    description: "外部ライブラリを使用していない"
+    timeout: 10
+
+max_iterations: 10
+command_timeout: 60
+
+claude_options:
+  timeout: 600
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Read"
+    - "Write"
