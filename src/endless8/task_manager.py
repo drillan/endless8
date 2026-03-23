@@ -71,11 +71,11 @@ class TaskManager:
 
     async def create(self) -> str:
         """新しいタスクを作成し、task_id を返す。"""
-        task_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        task_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         task_dir = self._task_dir(task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
 
-        # 状態マシンを初期化（CREATED 状態のファイルを作成）
+        # 状態マシンを初期化（CREATED 状態）
         TaskStateMachine(self._state_path(task_id))
 
         return task_id

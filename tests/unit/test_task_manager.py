@@ -204,6 +204,28 @@ class TestTaskManagerAdvance:
         assert status.phase == TaskPhase.COMPLETED
         assert status.is_complete
 
+    async def test_advance_returns_error_when_intake_rejected(
+        self,
+        project_dir: Path,
+        config: EngineConfig,
+    ) -> None:
+        """intake 拒否時に ERROR を返すこと。"""
+        from endless8.models import IntakeResult, IntakeStatus
+
+        mock_rejected_intake = AsyncMock()
+        mock_rejected_intake.run.return_value = IntakeResult(
+            status=IntakeStatus.REJECTED,
+            task="テストを書く",
+            criteria=["テストが全パス"],
+            rejection_reason="不適切",
+        )
+
+        tm = TaskManager(project_dir, config)
+        tm.set_agents(intake_agent=mock_rejected_intake)
+        task_id = await tm.create()
+        result = await tm.advance(task_id)
+        assert result.phase == TaskPhase.ERROR
+
     async def test_advance_on_terminal_raises(
         self,
         project_dir: Path,
