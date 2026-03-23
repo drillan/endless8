@@ -1,6 +1,7 @@
 """Task manager for endless8 task lifecycle management."""
 
 import logging
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from endless8.models import (
     criteria_to_str_list,
     filter_semantic_criteria,
 )
+from endless8.models.results import LoopResult, LoopStatus
 from endless8.models.state import TaskPhase
 from endless8.state import InvalidTransitionError, TaskStateMachine
 
@@ -303,6 +305,46 @@ class TaskManager:
             if not all_met
             else None,
         )
+
+    async def run(self, task_id: str) -> LoopResult:
+        """タスクを完了まで自動実行する。"""
+        # Intake
+        await self.advance(task_id)
+
+        # Execute → Judge ループ
+        while True:
+            result = await self.advance(task_id)
+
+            if result.phase == TaskPhase.COMPLETED:
+                return LoopResult(
+                    status=LoopStatus.COMPLETED,
+                    iterations_used=result.iteration,
+                    final_judgment=result.judgment,
+                )
+
+            if result.phase == TaskPhase.FAILED:
+                return LoopResult(
+                    status=LoopStatus.MAX_ITERATIONS,
+                    iterations_used=result.iteration,
+                    final_judgment=result.judgment,
+                )
+
+            if result.phase == TaskPhase.ERROR:
+                return LoopResult(
+                    status=LoopStatus.ERROR,
+                    iterations_used=result.iteration,
+                    error_message="Advance failed",
+                )
+
+    async def inject_result(self, task_id: str, result_path: Path) -> None:
+        """外部評価結果を注入する。"""
+        task_dir = self._task_dir(task_id)
+        if not task_dir.exists():
+            raise FileNotFoundError(f"Task not found: {task_id}")
+
+        dest = task_dir / "injected_result.json"
+        shutil.copy2(result_path, dest)
+        logger.info("Injected result for task %s: %s", task_id, dest)
 
 
 __all__ = ["AdvanceResult", "TaskManager", "TaskStatus"]
