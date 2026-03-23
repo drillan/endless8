@@ -1,6 +1,10 @@
 """Tests for criteria filtering."""
 
-from endless8.models.criteria import CommandCriterion, filter_semantic_criteria
+from endless8.models.criteria import (
+    CommandCriterion,
+    CriterionInput,
+    filter_semantic_criteria,
+)
 
 
 class TestFilterSemanticCriteria:
@@ -8,7 +12,7 @@ class TestFilterSemanticCriteria:
 
     def test_filters_out_command_criteria(self) -> None:
         """CommandCriterion がフィルタされること。"""
-        criteria = [
+        criteria: list[CriterionInput] = [
             "テストカバレッジが90%以上",
             CommandCriterion(
                 type="command",
@@ -40,7 +44,7 @@ class TestFilterSemanticCriteria:
 
     def test_preserves_order(self) -> None:
         """セマンティック条件の順序が保持されること。"""
-        criteria = [
+        criteria: list[CriterionInput] = [
             "条件1",
             CommandCriterion(type="command", command="cmd1"),
             "条件2",

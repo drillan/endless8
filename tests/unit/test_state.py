@@ -1,21 +1,26 @@
 """Tests for task state models."""
 
+from pathlib import Path
+
+import pytest
+
 from endless8.models.state import StateTransition, TaskPhase
+from endless8.state import InvalidTransitionError, TaskStateMachine
 
 
 class TestTaskPhase:
     """Tests for TaskPhase enum."""
 
     def test_all_phases_exist(self) -> None:
-        assert TaskPhase.CREATED == "created"
-        assert TaskPhase.INTAKE == "intake"
-        assert TaskPhase.EXECUTING == "executing"
-        assert TaskPhase.SUMMARIZING == "summarizing"
-        assert TaskPhase.JUDGING == "judging"
-        assert TaskPhase.COMPLETED == "completed"
-        assert TaskPhase.FAILED == "failed"
-        assert TaskPhase.ERROR == "error"
-        assert TaskPhase.CANCELLED == "cancelled"
+        assert TaskPhase.CREATED.value == "created"
+        assert TaskPhase.INTAKE.value == "intake"
+        assert TaskPhase.EXECUTING.value == "executing"
+        assert TaskPhase.SUMMARIZING.value == "summarizing"
+        assert TaskPhase.JUDGING.value == "judging"
+        assert TaskPhase.COMPLETED.value == "completed"
+        assert TaskPhase.FAILED.value == "failed"
+        assert TaskPhase.ERROR.value == "error"
+        assert TaskPhase.CANCELLED.value == "cancelled"
 
     def test_terminal_phases(self) -> None:
         assert TaskPhase.COMPLETED.is_terminal
@@ -52,13 +57,6 @@ class TestStateTransition:
         data = t.model_dump()
         restored = StateTransition(**data)
         assert restored == t
-
-
-from pathlib import Path
-
-import pytest
-
-from endless8.state import InvalidTransitionError, TaskStateMachine
 
 
 class TestTaskStateMachine:
