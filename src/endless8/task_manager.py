@@ -309,7 +309,13 @@ class TaskManager:
     async def run(self, task_id: str) -> LoopResult:
         """タスクを完了まで自動実行する。"""
         # Intake
-        await self.advance(task_id)
+        intake_result = await self.advance(task_id)
+        if intake_result.phase.is_terminal:
+            return LoopResult(
+                status=LoopStatus.ERROR,
+                iterations_used=0,
+                error_message=f"Intake failed: {intake_result.phase.value}",
+            )
 
         # Execute → Judge ループ
         while True:

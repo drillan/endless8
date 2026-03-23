@@ -330,6 +330,35 @@ class TestTaskManagerRun:
         result = await tm.run(task_id)
         assert result.status == LoopStatus.COMPLETED
 
+    async def test_run_returns_error_when_intake_rejected(
+        self,
+        project_dir: Path,
+        config: EngineConfig,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+    ) -> None:
+        from endless8.models import IntakeResult, IntakeStatus, LoopStatus
+
+        mock_rejected_intake = AsyncMock()
+        mock_rejected_intake.run.return_value = IntakeResult(
+            status=IntakeStatus.REJECTED,
+            task="テストを書く",
+            criteria=["テストが全パス"],
+            rejection_reason="不適切なタスク",
+        )
+
+        tm = TaskManager(project_dir, config)
+        tm.set_agents(
+            intake_agent=mock_rejected_intake,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+        task_id = await tm.create()
+        result = await tm.run(task_id)
+        assert result.status == LoopStatus.ERROR
+
     async def test_run_stops_at_max_iterations(
         self,
         project_dir: Path,
