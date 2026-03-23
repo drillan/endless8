@@ -21,6 +21,7 @@ from endless8.models.results import (
     LoopStatus,
     SemanticMetadata,
 )
+from endless8.models.state import StateTransition, TaskPhase
 from endless8.models.summary import (
     ExecutionSummary,
     KnowledgeEntry,
@@ -50,6 +51,9 @@ __all__ = [
     "JudgmentResult",
     "LoopStatus",
     "LoopResult",
+    # State
+    "TaskPhase",
+    "StateTransition",
     # Summary
     "KnowledgeEntry",
     "SummaryLLMOutput",
