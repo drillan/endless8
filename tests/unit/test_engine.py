@@ -2496,3 +2496,59 @@ class TestWorkingDirectoryPropagation:
         context = mock_execution_agent.run.call_args[0][0]
         assert isinstance(context, ExecutionContext)
         assert context.working_directory == "/home/user/project"
+
+    async def test_execution_agent_receives_only_semantic_criteria(
+        self,
+        mock_intake_agent: AsyncMock,
+        mock_execution_agent: AsyncMock,
+        mock_summary_agent: AsyncMock,
+        mock_judgment_agent: AsyncMock,
+    ) -> None:
+        """実行エージェントがセマンティック条件のみ受け取ること。"""
+        from endless8.config import EngineConfig
+        from endless8.engine import Engine
+
+        # 混合条件: セマンティック + コマンド
+        task_input = TaskInput(
+            task="テストカバレッジを改善する",
+            criteria=[
+                "テストカバレッジが90%以上",
+                CommandCriterion(
+                    type="command",
+                    command="pytest --cov",
+                    description="テスト全パス",
+                ),
+            ],
+            max_iterations=1,
+        )
+
+        config = EngineConfig(
+            task=task_input.task,
+            criteria=task_input.criteria,
+            max_iterations=1,
+        )
+
+        engine = Engine(
+            config=config,
+            intake_agent=mock_intake_agent,
+            execution_agent=mock_execution_agent,
+            summary_agent=mock_summary_agent,
+            judgment_agent=mock_judgment_agent,
+        )
+
+        with patch(
+            "endless8.engine.Engine._run_command_criteria",
+            new_callable=AsyncMock,
+            return_value=([], []),
+        ):
+            await engine.run(task_input)
+
+        # 実行エージェントに渡された ExecutionContext を検証
+        call_args = mock_execution_agent.run.call_args
+        context: ExecutionContext = call_args[0][0]
+
+        # セマンティック条件のみが含まれること
+        assert context.criteria == ["テストカバレッジが90%以上"]
+        # コマンド条件の description が含まれないこと
+        assert "テスト全パス" not in context.criteria
+        assert "pytest --cov" not in context.criteria

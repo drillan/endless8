@@ -35,6 +35,7 @@ from endless8.models import (
     ProgressEventType,
     TaskInput,
     criteria_to_str_list,
+    filter_semantic_criteria,
 )
 from endless8.raw_log import RawLogCollector
 
@@ -536,6 +537,7 @@ class Engine:
 
             # Run intake validation
             criteria_str = criteria_to_str_list(task_input.criteria)
+            execution_criteria = filter_semantic_criteria(task_input.criteria)
 
             # Emit task start event
             start_msg = (
@@ -659,7 +661,7 @@ class Engine:
                 # Build execution context
                 context = ExecutionContext(
                     task=task_input.task,
-                    criteria=criteria_str,
+                    criteria=execution_criteria,
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
@@ -854,6 +856,7 @@ class Engine:
         try:
             # Run intake validation
             criteria_str = criteria_to_str_list(task_input.criteria)
+            execution_criteria = filter_semantic_criteria(task_input.criteria)
             if self._intake_agent:
                 intake_result = await self._intake_agent.run(
                     task_input.task, criteria_str
@@ -874,7 +877,7 @@ class Engine:
                 # Build execution context
                 context = ExecutionContext(
                     task=task_input.task,
-                    criteria=criteria_str,
+                    criteria=execution_criteria,
                     iteration=iteration,
                     history_context=await self._get_history_context(),
                     knowledge_context=await self._get_knowledge_context(),
