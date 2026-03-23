@@ -20,11 +20,15 @@ from endless8.models import (
     JudgmentResult,
     SummaryMetadata,
 )
+from endless8.models.criteria import CriterionInput
 
 
 class TestHasSemanticCriteria:
     def test_mixed_criteria(self) -> None:
-        criteria = ["semantic", CommandCriterion(type="command", command="test")]
+        criteria: list[CriterionInput] = [
+            "semantic",
+            CommandCriterion(type="command", command="test"),
+        ]
         assert has_semantic_criteria(criteria) is True
 
     def test_command_only(self) -> None:
@@ -136,7 +140,7 @@ class TestBuildJudgmentResultFromCommands:
 class TestRunCommandCriteria:
     @pytest.mark.asyncio
     async def test_executes_command_criteria(self) -> None:
-        criteria = [
+        criteria: list[CriterionInput] = [
             "semantic condition",
             CommandCriterion(
                 type="command", command="pytest", description="tests pass"
@@ -223,7 +227,7 @@ class TestRunCommandCriteria:
     @pytest.mark.asyncio
     async def test_criterion_index_in_results(self) -> None:
         """CommandCriterionResult stores correct criterion_index (skip semantics)."""
-        criteria = [
+        criteria: list[CriterionInput] = [
             "semantic",
             CommandCriterion(type="command", command="cmd1"),
             CommandCriterion(type="command", command="cmd2"),
