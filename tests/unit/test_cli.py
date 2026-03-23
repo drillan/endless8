@@ -1590,3 +1590,62 @@ class TestStatusCommandKnowledge:
         result = runner.invoke(app, ["status", "--project", str(temp_dir)])
         assert result.exit_code == 0
         assert "ナレッジエントリ: 0" in result.output
+
+
+class TestStatusWithTaskId:
+    """Tests for status command with --task-id option."""
+
+    def test_status_with_task_id_shows_phase(self, tmp_path: Path) -> None:
+        """--task-id で指定したタスクのフェーズが表示されること。"""
+        from typer.testing import CliRunner
+
+        from endless8.cli.main import app
+
+        runner = CliRunner()
+
+        # Setup: タスクディレクトリを作成（state.jsonl なし = CREATED状態）
+        task_dir = tmp_path / ".e8" / "tasks" / "test-task"
+        task_dir.mkdir(parents=True)
+
+        result = runner.invoke(
+            app,
+            ["status", "--project", str(tmp_path), "--task-id", "test-task"],
+        )
+        assert result.exit_code == 0
+        assert "created" in result.stdout.lower()
+
+    def test_status_with_task_id_json(self, tmp_path: Path) -> None:
+        """--json で JSON 出力されること。"""
+        import json
+
+        from typer.testing import CliRunner
+
+        from endless8.cli.main import app
+
+        runner = CliRunner()
+
+        task_dir = tmp_path / ".e8" / "tasks" / "test-task"
+        task_dir.mkdir(parents=True)
+
+        result = runner.invoke(
+            app,
+            ["status", "--project", str(tmp_path), "--task-id", "test-task", "--json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["task_id"] == "test-task"
+        assert data["phase"] == "created"
+
+    def test_status_with_nonexistent_task_id(self, tmp_path: Path) -> None:
+        """存在しないタスクIDでエラーになること。"""
+        from typer.testing import CliRunner
+
+        from endless8.cli.main import app
+
+        runner = CliRunner()
+
+        result = runner.invoke(
+            app,
+            ["status", "--project", str(tmp_path), "--task-id", "nonexistent"],
+        )
+        assert result.exit_code == 1
