@@ -130,6 +130,18 @@ class TaskManager:
         if phase == TaskPhase.EXECUTING:
             return await self._advance_execute(sm, task_dir)
 
+        # 中間フェーズからの復旧
+        if phase == TaskPhase.INTAKE:
+            sm.transition(TaskPhase.EXECUTING, iteration=sm.current_iteration + 1)
+            return AdvanceResult(
+                phase=TaskPhase.EXECUTING, iteration=sm.current_iteration
+            )
+        if phase in (TaskPhase.SUMMARIZING, TaskPhase.JUDGING):
+            sm.transition(
+                TaskPhase.ERROR, metadata={"reason": f"stuck_in_{phase.value}"}
+            )
+            return AdvanceResult(phase=TaskPhase.ERROR, iteration=sm.current_iteration)
+
         raise RuntimeError(f"Cannot advance from phase: {phase.value}")
 
     async def _advance_intake(
@@ -158,69 +170,74 @@ class TaskManager:
         """EXECUTING -> SUMMARIZING -> JUDGING -> (COMPLETED | EXECUTING | FAILED)。"""
         iteration = sm.current_iteration
 
-        # 1. Execute
-        if not self._execution_agent:
-            raise RuntimeError("Execution agent not configured")
+        try:
+            # 1. Execute
+            if not self._execution_agent:
+                raise RuntimeError("Execution agent not configured")
 
-        history_store = History(task_dir / "history.jsonl")
-        knowledge_base = KnowledgeBase(task_dir / "knowledge.jsonl")
+            history_store = History(task_dir / "history.jsonl")
+            knowledge_base = KnowledgeBase(task_dir / "knowledge.jsonl")
 
-        history_context = await history_store.get_context_string(
-            self._config.history_context_size
-        )
-        knowledge_context = await knowledge_base.get_context_string(
-            self._config.knowledge_context_size
-        )
-
-        context = ExecutionContext(
-            task=self._config.task,
-            criteria=filter_semantic_criteria(self._config.criteria),
-            iteration=iteration,
-            history_context=history_context,
-            knowledge_context=knowledge_context,
-            working_directory=self._config.working_directory,
-            suggested_next_action=self._previous_suggested_next_action,
-        )
-        execution_result = await self._execution_agent.run(context)
-
-        # 2. Summary
-        sm.transition(TaskPhase.SUMMARIZING)
-
-        if not self._summary_agent:
-            raise RuntimeError("Summary agent not configured")
-
-        criteria_str = criteria_to_str_list(self._config.criteria)
-        summary, knowledge_list = await self._summary_agent.run(
-            execution_result, iteration, criteria_str
-        )
-        await history_store.append(summary)
-        if knowledge_list:
-            await knowledge_base.add_many(knowledge_list)
-
-        # 3. Judgment
-        sm.transition(TaskPhase.JUDGING)
-        judgment = await self._run_judgment(summary)
-        await history_store.append_judgment(judgment, iteration)
-
-        self._previous_suggested_next_action = judgment.suggested_next_action
-
-        # 4. Transition
-        if judgment.is_complete:
-            sm.transition(TaskPhase.COMPLETED)
-            return AdvanceResult(
-                phase=TaskPhase.COMPLETED, iteration=iteration, judgment=judgment
+            history_context = await history_store.get_context_string(
+                self._config.history_context_size
+            )
+            knowledge_context = await knowledge_base.get_context_string(
+                self._config.knowledge_context_size
             )
 
-        if iteration >= self._config.max_iterations:
-            sm.transition(TaskPhase.FAILED, metadata={"reason": "max_iterations"})
-            return AdvanceResult(
-                phase=TaskPhase.FAILED, iteration=iteration, judgment=judgment
+            context = ExecutionContext(
+                task=self._config.task,
+                criteria=filter_semantic_criteria(self._config.criteria),
+                iteration=iteration,
+                history_context=history_context,
+                knowledge_context=knowledge_context,
+                working_directory=self._config.working_directory,
+                suggested_next_action=self._previous_suggested_next_action,
             )
+            execution_result = await self._execution_agent.run(context)
 
-        sm.transition(TaskPhase.EXECUTING, iteration=iteration + 1)
-        return AdvanceResult(
-            phase=TaskPhase.EXECUTING, iteration=iteration + 1, judgment=judgment
-        )
+            # 2. Summary
+            sm.transition(TaskPhase.SUMMARIZING)
+
+            if not self._summary_agent:
+                raise RuntimeError("Summary agent not configured")
+
+            criteria_str = criteria_to_str_list(self._config.criteria)
+            summary, knowledge_list = await self._summary_agent.run(
+                execution_result, iteration, criteria_str
+            )
+            await history_store.append(summary)
+            if knowledge_list:
+                await knowledge_base.add_many(knowledge_list)
+
+            # 3. Judgment
+            sm.transition(TaskPhase.JUDGING)
+            judgment = await self._run_judgment(summary)
+            await history_store.append_judgment(judgment, iteration)
+
+            self._previous_suggested_next_action = judgment.suggested_next_action
+
+            # 4. Transition
+            if judgment.is_complete:
+                sm.transition(TaskPhase.COMPLETED)
+                return AdvanceResult(
+                    phase=TaskPhase.COMPLETED, iteration=iteration, judgment=judgment
+                )
+
+            if iteration >= self._config.max_iterations:
+                sm.transition(TaskPhase.FAILED, metadata={"reason": "max_iterations"})
+                return AdvanceResult(
+                    phase=TaskPhase.FAILED, iteration=iteration, judgment=judgment
+                )
+
+            sm.transition(TaskPhase.EXECUTING, iteration=iteration + 1)
+            return AdvanceResult(
+                phase=TaskPhase.EXECUTING, iteration=iteration + 1, judgment=judgment
+            )
+        except Exception as e:
+            logger.exception("Advance execute failed at iteration %d: %s", iteration, e)
+            sm.transition(TaskPhase.ERROR, metadata={"reason": str(e)[:200]})
+            return AdvanceResult(phase=TaskPhase.ERROR, iteration=iteration)
 
     async def _run_judgment(self, summary: ExecutionSummary) -> JudgmentResult:
         """判定フェーズ。"""

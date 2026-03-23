@@ -400,6 +400,67 @@ class TestTaskManagerRun:
         assert result.status == LoopStatus.MAX_ITERATIONS
 
 
+class TestTaskManagerAdvanceRecovery:
+    """Tests for advance() recovery from intermediate phases."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path: Path) -> Path:
+        return tmp_path / "project"
+
+    @pytest.fixture
+    def config(self) -> EngineConfig:
+        return EngineConfig(
+            task="テストを書く",
+            criteria=["テストが全パス"],
+            max_iterations=5,
+        )
+
+    async def test_advance_from_intake_transitions_to_executing(
+        self, project_dir: Path, config: EngineConfig
+    ) -> None:
+        """INTAKE フェーズから復旧して EXECUTING に遷移すること。"""
+        tm = TaskManager(project_dir, config)
+        task_id = await tm.create()
+
+        # 手動で INTAKE 状態にする（クラッシュ後の状態をシミュレート）
+        from endless8.state import TaskStateMachine
+
+        sm = TaskStateMachine(tm._state_path(task_id))
+        sm.transition(TaskPhase.INTAKE)
+
+        # advance() が INTAKE → EXECUTING に遷移すること
+        result = await tm.advance(task_id)
+        assert result.phase == TaskPhase.EXECUTING
+
+    async def test_advance_execute_error_transitions_to_error(
+        self, project_dir: Path, config: EngineConfig
+    ) -> None:
+        """実行中に例外が発生した場合 ERROR に遷移すること。"""
+        mock_intake = AsyncMock()
+        from endless8.models import IntakeResult, IntakeStatus
+
+        mock_intake.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED,
+            task="テストを書く",
+            criteria=["テストが全パス"],
+        )
+
+        mock_execution = AsyncMock()
+        mock_execution.raw_log_collector = None
+        mock_execution.run.side_effect = RuntimeError("Agent crashed")
+
+        tm = TaskManager(project_dir, config)
+        tm.set_agents(intake_agent=mock_intake, execution_agent=mock_execution)
+        task_id = await tm.create()
+
+        # intake
+        await tm.advance(task_id)
+
+        # execute should catch error and return ERROR phase
+        result = await tm.advance(task_id)
+        assert result.phase == TaskPhase.ERROR
+
+
 class TestTaskManagerInjectResult:
     """Tests for TaskManager.inject_result()."""
 
