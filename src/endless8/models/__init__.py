@@ -5,6 +5,7 @@ from endless8.models.criteria import (
     CriterionInput,
     CriterionType,
     criteria_to_str_list,
+    filter_semantic_criteria,
 )
 from endless8.models.knowledge import Knowledge, KnowledgeConfidence, KnowledgeType
 from endless8.models.progress import ProgressEvent, ProgressEventType
@@ -37,6 +38,7 @@ __all__ = [
     "CommandCriterion",
     "CriterionInput",
     "criteria_to_str_list",
+    "filter_semantic_criteria",
     # Results
     "IntakeStatus",
     "IntakeResult",
