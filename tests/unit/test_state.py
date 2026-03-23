@@ -52,3 +52,72 @@ class TestStateTransition:
         data = t.model_dump()
         restored = StateTransition(**data)
         assert restored == t
+
+
+from pathlib import Path
+
+import pytest
+
+from endless8.state import InvalidTransitionError, TaskStateMachine
+
+
+class TestTaskStateMachine:
+    """Tests for TaskStateMachine class."""
+
+    @pytest.fixture
+    def state_file(self, tmp_path: Path) -> Path:
+        return tmp_path / "state.jsonl"
+
+    def test_initial_phase_is_created(self, state_file: Path) -> None:
+        sm = TaskStateMachine(state_file)
+        assert sm.current_phase == TaskPhase.CREATED
+        assert sm.current_iteration == 0
+
+    def test_valid_transition(self, state_file: Path) -> None:
+        sm = TaskStateMachine(state_file)
+        t = sm.transition(TaskPhase.INTAKE)
+        assert t.from_phase == TaskPhase.CREATED
+        assert t.to_phase == TaskPhase.INTAKE
+        assert sm.current_phase == TaskPhase.INTAKE
+
+    def test_invalid_transition_raises(self, state_file: Path) -> None:
+        sm = TaskStateMachine(state_file)
+        with pytest.raises(InvalidTransitionError):
+            sm.transition(TaskPhase.COMPLETED)
+
+    def test_terminal_phase_blocks_transition(self, state_file: Path) -> None:
+        sm = TaskStateMachine(state_file)
+        sm.transition(TaskPhase.INTAKE)
+        sm.transition(TaskPhase.EXECUTING, iteration=1)
+        sm.transition(TaskPhase.SUMMARIZING)
+        sm.transition(TaskPhase.JUDGING)
+        sm.transition(TaskPhase.COMPLETED)
+        with pytest.raises(InvalidTransitionError):
+            sm.transition(TaskPhase.EXECUTING, iteration=2)
+
+    def test_persistence_and_reload(self, state_file: Path) -> None:
+        sm1 = TaskStateMachine(state_file)
+        sm1.transition(TaskPhase.INTAKE)
+        sm1.transition(TaskPhase.EXECUTING, iteration=1)
+
+        sm2 = TaskStateMachine(state_file)
+        assert sm2.current_phase == TaskPhase.EXECUTING
+        assert sm2.current_iteration == 1
+
+    def test_get_transitions(self, state_file: Path) -> None:
+        sm = TaskStateMachine(state_file)
+        sm.transition(TaskPhase.INTAKE)
+        sm.transition(TaskPhase.EXECUTING, iteration=1)
+        transitions = sm.get_transitions()
+        assert len(transitions) == 2
+        assert transitions[0].to_phase == TaskPhase.INTAKE
+        assert transitions[1].to_phase == TaskPhase.EXECUTING
+
+    def test_iteration_updates_on_executing(self, state_file: Path) -> None:
+        sm = TaskStateMachine(state_file)
+        sm.transition(TaskPhase.INTAKE)
+        sm.transition(TaskPhase.EXECUTING, iteration=1)
+        sm.transition(TaskPhase.SUMMARIZING)
+        sm.transition(TaskPhase.JUDGING)
+        sm.transition(TaskPhase.EXECUTING, iteration=2)
+        assert sm.current_iteration == 2
