@@ -51,6 +51,26 @@ class AdvanceResult(BaseModel):
     judgment: JudgmentResult | None = None
 
 
+async def inject_result(project_dir: Path, task_id: str, result_path: Path) -> None:
+    """外部評価結果をタスクディレクトリに注入する。
+
+    Args:
+        project_dir: プロジェクトディレクトリ。
+        task_id: タスクID。
+        result_path: 結果JSONファイルのパス。
+
+    Raises:
+        FileNotFoundError: タスクが存在しない場合。
+    """
+    task_dir = project_dir / ".e8" / "tasks" / task_id
+    if not task_dir.exists():
+        raise FileNotFoundError(f"Task not found: {task_id}")
+
+    dest = task_dir / "injected_result.json"
+    shutil.copy2(result_path, dest)
+    logger.info("Injected result for task %s: %s", task_id, dest)
+
+
 class TaskManager:
     """タスクのライフサイクルを管理する。"""
 
@@ -302,13 +322,7 @@ class TaskManager:
 
     async def inject_result(self, task_id: str, result_path: Path) -> None:
         """外部評価結果を注入する。"""
-        task_dir = self._task_dir(task_id)
-        if not task_dir.exists():
-            raise FileNotFoundError(f"Task not found: {task_id}")
-
-        dest = task_dir / "injected_result.json"
-        shutil.copy2(result_path, dest)
-        logger.info("Injected result for task %s: %s", task_id, dest)
+        await inject_result(self._project_dir, task_id, result_path)
 
 
-__all__ = ["AdvanceResult", "TaskManager", "TaskStatus"]
+__all__ = ["AdvanceResult", "TaskManager", "TaskStatus", "inject_result"]

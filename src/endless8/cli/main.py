@@ -589,28 +589,36 @@ def status(
 ) -> None:
     """現在の実行状態を表示します。"""
     if task_id:
-        from endless8.state import TaskStateMachine
+        from endless8.task_manager import TaskManager
 
-        task_dir = project / ".e8" / "tasks" / task_id
-        if not task_dir.exists():
+        # status() only needs project_dir, use minimal config
+        config = EngineConfig(
+            task="",
+            criteria=[""],
+            working_directory=str(project.resolve()),
+        )
+        tm = TaskManager(project, config)
+
+        try:
+            task_status = asyncio.run(tm.status(task_id))
+        except FileNotFoundError:
             typer.echo(f"エラー: タスクが見つかりません: {task_id}", err=True)
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
-        sm = TaskStateMachine(task_dir / "state.jsonl")
         if json_output:
             import json as json_mod
 
             data = {
-                "task_id": task_id,
-                "phase": sm.current_phase.value,
-                "current_iteration": sm.current_iteration,
-                "is_complete": sm.current_phase.value == "completed",
+                "task_id": task_status.task_id,
+                "phase": task_status.phase.value,
+                "current_iteration": task_status.current_iteration,
+                "is_complete": task_status.is_complete,
             }
             typer.echo(json_mod.dumps(data, ensure_ascii=False))
         else:
-            typer.echo(f"タスクID: {task_id}")
-            typer.echo(f"フェーズ: {sm.current_phase.value}")
-            typer.echo(f"イテレーション: {sm.current_iteration}")
+            typer.echo(f"タスクID: {task_status.task_id}")
+            typer.echo(f"フェーズ: {task_status.phase.value}")
+            typer.echo(f"イテレーション: {task_status.current_iteration}")
         return
 
     # 既存のステータス表示ロジック（変更なし）
@@ -713,12 +721,10 @@ def inject_result_cmd(
         raise typer.Exit(1)
 
     async def run_inject() -> None:
-        from endless8.task_manager import TaskManager
+        from endless8.task_manager import inject_result
 
-        config = EngineConfig(task="placeholder", criteria=["placeholder"])
-        tm = TaskManager(project, config)
         try:
-            await tm.inject_result(task_id, result_file)
+            await inject_result(project, task_id, result_file)
         except FileNotFoundError:
             typer.echo(f"エラー: タスクが見つかりません: {task_id}", err=True)
             raise typer.Exit(1) from None
