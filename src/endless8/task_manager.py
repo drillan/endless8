@@ -7,20 +7,17 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
-from endless8.command.executor import CommandExecutor
-from endless8.config import EngineConfig
-from endless8.engine import (
+from endless8.agents import (
     ExecutionAgentProtocol,
+    ExecutionContext,
     IntakeAgentProtocol,
     JudgmentAgentProtocol,
     SummaryAgentProtocol,
 )
+from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
+from endless8.judgment import run_judgment_phase
 from endless8.models import (
-    CommandCriterion,
-    CriteriaEvaluation,
-    CriterionType,
     ExecutionSummary,
     IntakeStatus,
     JudgmentResult,
@@ -227,83 +224,16 @@ class TaskManager:
 
     async def _run_judgment(self, summary: ExecutionSummary) -> JudgmentResult:
         """判定フェーズ。"""
-        criteria = self._config.criteria
-        cwd = self._config.working_directory
-
-        # コマンド条件の実行
-        executor = CommandExecutor()
-        command_evaluations: list[CriteriaEvaluation] = []
-        command_results: list[CommandCriterionResult] = []
-
-        for index, criterion in enumerate(criteria):
-            if not isinstance(criterion, CommandCriterion):
-                continue
-            timeout = criterion.timeout or self._config.command_timeout
-            result = await executor.execute(criterion.command, cwd, timeout)
-            is_met = result.exit_code == 0
-            description = criterion.description or criterion.command
-            evidence_parts = [f"exit_code={result.exit_code}"]
-            if result.stdout:
-                evidence_parts.append(f"stdout: {result.stdout[:200]}")
-
-            command_evaluations.append(
-                CriteriaEvaluation(
-                    criterion=description,
-                    is_met=is_met,
-                    evidence=", ".join(evidence_parts),
-                    confidence=1.0,
-                    evaluation_method=CriterionType.COMMAND,
-                    command_result=result,
-                )
-            )
-            command_results.append(
-                CommandCriterionResult(
-                    criterion_index=index,
-                    description=description,
-                    command=criterion.command,
-                    is_met=is_met,
-                    result=result,
-                )
-            )
-
-        has_semantic = any(isinstance(c, str) for c in criteria)
-
-        if not has_semantic:
-            all_met = all(e.is_met for e in command_evaluations)
-            return JudgmentResult(
-                is_complete=all_met,
-                evaluations=command_evaluations,
-                overall_reason="すべてのコマンド条件が満たされました"
-                if all_met
-                else "未達成のコマンド条件あり",
-                suggested_next_action=None if all_met else "コマンド条件を確認",
-            )
-
-        if not self._judgment_agent:
-            raise RuntimeError("Judgment agent not configured")
-
-        semantic_criteria = [c for c in criteria if isinstance(c, str)]
-        judgment_context = JudgmentContext(
+        return await run_judgment_phase(
+            criteria=self._config.criteria,
             task=self._config.task,
-            criteria=semantic_criteria,
-            execution_summary=summary,
-            command_results=command_results if command_results else None,
-            custom_prompt=self._config.prompts.judgment,
-        )
-        semantic_judgment = await self._judgment_agent.run(judgment_context)
-
-        if not command_evaluations:
-            return semantic_judgment
-
-        merged = command_evaluations + semantic_judgment.evaluations
-        all_met = all(e.is_met for e in merged)
-        return JudgmentResult(
-            is_complete=all_met,
-            evaluations=merged,
-            overall_reason=semantic_judgment.overall_reason,
-            suggested_next_action=semantic_judgment.suggested_next_action
-            if not all_met
+            summary=summary,
+            cwd=self._config.working_directory,
+            default_timeout=self._config.command_timeout,
+            judgment_agent_run=self._judgment_agent.run
+            if self._judgment_agent
             else None,
+            custom_prompt=self._config.prompts.judgment,
         )
 
     async def run(self, task_id: str) -> LoopResult:

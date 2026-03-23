@@ -15,14 +15,18 @@ from pathlib import Path
 from typing import Protocol
 
 from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
-from endless8.command.executor import CommandExecutionError, CommandExecutor
+from endless8.command.executor import CommandExecutionError
 from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
+from endless8.judgment import (
+    build_judgment_result_from_commands,
+    has_semantic_criteria,
+    run_command_criteria,
+    run_judgment_phase,
+)
 from endless8.models import (
-    CommandCriterion,
     CriteriaEvaluation,
     CriterionInput,
-    CriterionType,
     ExecutionResult,
     ExecutionSummary,
     IntakeResult,
@@ -252,182 +256,32 @@ class Engine:
         cwd: str,
         default_timeout: float,
     ) -> tuple[list[CriteriaEvaluation], list[CommandCriterionResult]]:
-        """Run command criteria and return evaluations.
-
-        Args:
-            criteria: Full criteria list (semantic + command).
-            cwd: Working directory for command execution (FR-014).
-            default_timeout: Default timeout in seconds.
-
-        Returns:
-            tuple of (command_evaluations, command_criterion_results).
-
-        Raises:
-            CommandExecutionError: On execution error (FR-009).
-        """
-        executor = CommandExecutor()
-        command_evaluations: list[CriteriaEvaluation] = []
-        command_criterion_results: list[CommandCriterionResult] = []
-
-        for index, criterion in enumerate(criteria):
-            if not isinstance(criterion, CommandCriterion):
-                continue
-
-            timeout = criterion.timeout or default_timeout
-            result = await executor.execute(criterion.command, cwd, timeout)
-
-            is_met = result.exit_code == 0
-            description = criterion.description or criterion.command
-
-            evidence_parts = [f"exit_code={result.exit_code}"]
-            if result.stdout:
-                evidence_parts.append(f"stdout: {result.stdout[:200]}")
-            if result.stderr:
-                evidence_parts.append(f"stderr: {result.stderr[:200]}")
-
-            command_evaluations.append(
-                CriteriaEvaluation(
-                    criterion=description,
-                    is_met=is_met,
-                    evidence=", ".join(evidence_parts),
-                    confidence=1.0,
-                    evaluation_method=CriterionType.COMMAND,
-                    command_result=result,
-                )
-            )
-
-            command_criterion_results.append(
-                CommandCriterionResult(
-                    criterion_index=index,
-                    description=description,
-                    command=criterion.command,
-                    is_met=is_met,
-                    result=result,
-                )
-            )
-
-        return command_evaluations, command_criterion_results
+        return await run_command_criteria(criteria, cwd, default_timeout)
 
     def _build_judgment_result_from_commands(
         self,
         command_evaluations: list[CriteriaEvaluation],
     ) -> JudgmentResult:
-        """Build JudgmentResult from command evaluations only (FR-010).
-
-        Used when there are no semantic criteria, so LLM judgment is skipped.
-
-        Args:
-            command_evaluations: Evaluations from command criteria.
-
-        Returns:
-            JudgmentResult built from command results only.
-        """
-        all_met = all(e.is_met for e in command_evaluations)
-        if all_met:
-            overall_reason = "すべてのコマンド条件が満たされました"
-        else:
-            not_met = [e.criterion for e in command_evaluations if not e.is_met]
-            overall_reason = f"未達成のコマンド条件: {', '.join(not_met)}"
-
-        return JudgmentResult(
-            is_complete=all_met,
-            evaluations=command_evaluations,
-            overall_reason=overall_reason,
-            suggested_next_action=None
-            if all_met
-            else "未達成のコマンド条件を確認してください",
-        )
+        return build_judgment_result_from_commands(command_evaluations)
 
     def _has_semantic_criteria(self, criteria: list[CriterionInput]) -> bool:
-        """Check if criteria list contains any semantic (str) criteria."""
-        return any(isinstance(c, str) for c in criteria)
+        return has_semantic_criteria(criteria)
 
     async def _judgment_phase(
         self,
         task_input: TaskInput,
         summary: ExecutionSummary,
     ) -> JudgmentResult:
-        """Execute the judgment phase with mixed criteria support.
-
-        Flow:
-            1. Run command criteria (_run_command_criteria)
-            2. Determine if semantic criteria exist
-               a. No semantic criteria -> _build_judgment_result_from_commands (FR-010)
-               b. Semantic criteria exist -> JudgmentAgent.run() with command_results
-            3. Merge command evaluations + semantic evaluations into unified JudgmentResult
-            4. Determine suggested_next_action: use semantic judgment's suggestion,
-               or auto-generate from failed command descriptions if absent (#53)
-
-        Args:
-            task_input: Task input with criteria.
-            summary: Execution summary from current iteration.
-
-        Returns:
-            JudgmentResult with all evaluations merged.
-        """
-        criteria = task_input.criteria
-
-        cwd = self._config.working_directory
-
-        # Step 1: Run command criteria
-        (
-            command_evaluations,
-            command_criterion_results,
-        ) = await self._run_command_criteria(
-            criteria,
-            cwd=cwd,
-            default_timeout=self._config.command_timeout,
-        )
-
-        has_semantic = self._has_semantic_criteria(criteria)
-
-        # Step 2a: Command-only -> skip LLM (FR-010)
-        if not has_semantic:
-            return self._build_judgment_result_from_commands(command_evaluations)
-
-        # Step 2b: Mixed or semantic-only -> run LLM judgment
-        if not self._judgment_agent:
-            raise RuntimeError("Judgment agent not configured")
-
-        semantic_criteria = [c for c in criteria if isinstance(c, str)]
-        judgment_context = JudgmentContext(
+        return await run_judgment_phase(
+            criteria=task_input.criteria,
             task=task_input.task,
-            criteria=semantic_criteria,
-            execution_summary=summary,
-            command_results=command_criterion_results
-            if command_criterion_results
+            summary=summary,
+            cwd=self._config.working_directory,
+            default_timeout=self._config.command_timeout,
+            judgment_agent_run=self._judgment_agent.run
+            if self._judgment_agent
             else None,
             custom_prompt=self._config.prompts.judgment,
-        )
-        semantic_judgment = await self._judgment_agent.run(judgment_context)
-
-        # Step 3: Merge evaluations if there are command evaluations
-        if not command_evaluations:
-            return semantic_judgment
-
-        merged_evaluations = command_evaluations + semantic_judgment.evaluations
-        all_met = all(e.is_met for e in merged_evaluations)
-
-        # Determine suggested_next_action (#53):
-        # When command criteria fail but semantic judgment has no suggestion,
-        # auto-generate from failed command descriptions
-        suggested_next_action: str | None = None
-        if not all_met:
-            suggested_next_action = semantic_judgment.suggested_next_action
-            if not suggested_next_action:
-                failed_commands = [e for e in command_evaluations if not e.is_met]
-                if failed_commands:
-                    descriptions = [f"- {e.criterion}" for e in failed_commands]
-                    suggested_next_action = (
-                        "以下のコマンド条件が未達成です。根本的に異なるアプローチを検討してください:\n"
-                        + "\n".join(descriptions)
-                    )
-
-        return JudgmentResult(
-            is_complete=all_met,
-            evaluations=merged_evaluations,
-            overall_reason=semantic_judgment.overall_reason,
-            suggested_next_action=suggested_next_action,
         )
 
     async def _get_history_context(self) -> str:

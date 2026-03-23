@@ -2537,7 +2537,7 @@ class TestWorkingDirectoryPropagation:
         )
 
         with patch(
-            "endless8.engine.Engine._run_command_criteria",
+            "endless8.judgment.run_command_criteria",
             new_callable=AsyncMock,
             return_value=([], []),
         ):
