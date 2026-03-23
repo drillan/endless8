@@ -536,3 +536,99 @@ class TestTaskManagerInjectResult:
         result_file.write_text("{}")
         with pytest.raises(FileNotFoundError):
             await tm.inject_result("nonexistent", result_file)
+
+
+class TestTaskManagerSuggestedNextActionPersistence:
+    """Tests for suggested_next_action persistence across process restarts."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path: Path) -> Path:
+        return tmp_path / "project"
+
+    @pytest.fixture
+    def config(self) -> EngineConfig:
+        return EngineConfig(
+            task="テストを書く",
+            criteria=["テストが全パス"],
+            max_iterations=5,
+        )
+
+    async def test_suggested_next_action_persists_across_instances(
+        self, project_dir: Path, config: EngineConfig
+    ) -> None:
+        """プロセス再起動後も suggested_next_action が復元されること。"""
+        from endless8.models import (
+            CriteriaEvaluation,
+            ExecutionResult,
+            ExecutionStatus,
+            ExecutionSummary,
+            IntakeResult,
+            IntakeStatus,
+            JudgmentResult,
+            SummaryMetadata,
+        )
+
+        # Setup: judgment returns not complete with suggestion
+        mock_intake = AsyncMock()
+        mock_intake.run.return_value = IntakeResult(
+            status=IntakeStatus.ACCEPTED, task="t", criteria=["c"]
+        )
+        mock_exec = AsyncMock()
+        mock_exec.raw_log_collector = None
+        mock_exec.run.return_value = ExecutionResult(
+            status=ExecutionStatus.SUCCESS, output="done", artifacts=[]
+        )
+        mock_summary = AsyncMock()
+        mock_summary.run.return_value = (
+            ExecutionSummary(
+                iteration=1,
+                approach="a",
+                result=ExecutionStatus.SUCCESS,
+                reason="r",
+                artifacts=[],
+                metadata=SummaryMetadata(),
+                timestamp="2026-01-01T00:00:00Z",
+            ),
+            [],
+        )
+        mock_judgment = AsyncMock()
+        mock_judgment.run.return_value = JudgmentResult(
+            is_complete=False,
+            evaluations=[
+                CriteriaEvaluation(
+                    criterion="c",
+                    is_met=False,
+                    evidence="e",
+                    confidence=0.8,
+                )
+            ],
+            overall_reason="未完了",
+            suggested_next_action="別のアプローチを試してください",
+        )
+
+        # First TaskManager instance: intake + first execution
+        tm1 = TaskManager(project_dir, config)
+        tm1.set_agents(
+            intake_agent=mock_intake,
+            execution_agent=mock_exec,
+            summary_agent=mock_summary,
+            judgment_agent=mock_judgment,
+        )
+        task_id = await tm1.create()
+        await tm1.advance(task_id)  # intake
+        await tm1.advance(task_id)  # execute -> not complete
+
+        # Second TaskManager instance (simulating process restart)
+        tm2 = TaskManager(project_dir, config)
+        tm2.set_agents(
+            intake_agent=mock_intake,
+            execution_agent=mock_exec,
+            summary_agent=mock_summary,
+            judgment_agent=mock_judgment,
+        )
+        await tm2.advance(task_id)  # should use persisted suggestion
+
+        # Verify the execution agent received the suggestion
+        last_call = mock_exec.run.call_args
+        context = last_call[0][0]
+        assert context.suggested_next_action == "別のアプローチを試してください"

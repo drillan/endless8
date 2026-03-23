@@ -190,6 +190,20 @@ class TaskManager:
         """EXECUTING -> SUMMARIZING -> JUDGING -> (COMPLETED | EXECUTING | FAILED)。"""
         iteration = sm.current_iteration
 
+        # Restore suggested_next_action from state if not in memory
+        if self._previous_suggested_next_action is None:
+            transitions = sm.get_transitions()
+            # Find the last EXECUTING transition's metadata
+            for t in reversed(transitions):
+                if (
+                    t.to_phase == TaskPhase.EXECUTING
+                    and "suggested_next_action" in t.metadata
+                ):
+                    self._previous_suggested_next_action = t.metadata[
+                        "suggested_next_action"
+                    ]
+                    break
+
         try:
             # 1. Execute
             if not self._execution_agent:
@@ -250,7 +264,14 @@ class TaskManager:
                     phase=TaskPhase.FAILED, iteration=iteration, judgment=judgment
                 )
 
-            sm.transition(TaskPhase.EXECUTING, iteration=iteration + 1)
+            next_metadata: dict[str, str] = {}
+            if judgment.suggested_next_action:
+                next_metadata["suggested_next_action"] = judgment.suggested_next_action
+            sm.transition(
+                TaskPhase.EXECUTING,
+                iteration=iteration + 1,
+                metadata=next_metadata,
+            )
             return AdvanceResult(
                 phase=TaskPhase.EXECUTING, iteration=iteration + 1, judgment=judgment
             )
