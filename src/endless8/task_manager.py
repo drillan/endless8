@@ -2,7 +2,7 @@
 
 import logging
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -71,7 +71,7 @@ class TaskManager:
 
     async def create(self) -> str:
         """新しいタスクを作成し、task_id を返す。"""
-        task_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        task_id = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
         task_dir = self._task_dir(task_id)
         task_dir.mkdir(parents=True, exist_ok=True)
 
@@ -132,7 +132,7 @@ class TaskManager:
 
         # 中間フェーズからの復旧
         if phase == TaskPhase.INTAKE:
-            sm.transition(TaskPhase.EXECUTING, iteration=sm.current_iteration + 1)
+            sm.transition(TaskPhase.EXECUTING, iteration=max(1, sm.current_iteration))
             return AdvanceResult(
                 phase=TaskPhase.EXECUTING, iteration=sm.current_iteration
             )
@@ -234,9 +234,14 @@ class TaskManager:
             return AdvanceResult(
                 phase=TaskPhase.EXECUTING, iteration=iteration + 1, judgment=judgment
             )
+        except InvalidTransitionError:
+            raise
         except Exception as e:
             logger.exception("Advance execute failed at iteration %d: %s", iteration, e)
-            sm.transition(TaskPhase.ERROR, metadata={"reason": str(e)[:200]})
+            try:
+                sm.transition(TaskPhase.ERROR, metadata={"reason": str(e)[:200]})
+            except InvalidTransitionError:
+                logger.error("Cannot transition to ERROR from %s", sm.current_phase)
             return AdvanceResult(phase=TaskPhase.ERROR, iteration=iteration)
 
     async def _run_judgment(self, summary: ExecutionSummary) -> JudgmentResult:
@@ -287,6 +292,12 @@ class TaskManager:
                     status=LoopStatus.ERROR,
                     iterations_used=result.iteration,
                     error_message="Advance failed",
+                )
+
+            if result.phase == TaskPhase.CANCELLED:
+                return LoopResult(
+                    status=LoopStatus.CANCELLED,
+                    iterations_used=result.iteration,
                 )
 
     async def inject_result(self, task_id: str, result_path: Path) -> None:

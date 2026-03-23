@@ -14,19 +14,12 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import Protocol
 
-from endless8.agents import CommandCriterionResult, ExecutionContext, JudgmentContext
+from endless8.agents import ExecutionContext, JudgmentContext
 from endless8.command.executor import CommandExecutionError
 from endless8.config import EngineConfig
 from endless8.history import History, KnowledgeBase
-from endless8.judgment import (
-    build_judgment_result_from_commands,
-    has_semantic_criteria,
-    run_command_criteria,
-    run_judgment_phase,
-)
+from endless8.judgment import run_judgment_phase
 from endless8.models import (
-    CriteriaEvaluation,
-    CriterionInput,
     ExecutionResult,
     ExecutionSummary,
     IntakeResult,
@@ -249,23 +242,6 @@ class Engine:
             return raw_log_content
         finally:
             self._teardown_raw_log_collector()
-
-    async def _run_command_criteria(
-        self,
-        criteria: list[CriterionInput],
-        cwd: str,
-        default_timeout: float,
-    ) -> tuple[list[CriteriaEvaluation], list[CommandCriterionResult]]:
-        return await run_command_criteria(criteria, cwd, default_timeout)
-
-    def _build_judgment_result_from_commands(
-        self,
-        command_evaluations: list[CriteriaEvaluation],
-    ) -> JudgmentResult:
-        return build_judgment_result_from_commands(command_evaluations)
-
-    def _has_semantic_criteria(self, criteria: list[CriterionInput]) -> bool:
-        return has_semantic_criteria(criteria)
 
     async def _judgment_phase(
         self,
