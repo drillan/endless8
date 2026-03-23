@@ -64,6 +64,41 @@ print(f"状態: {result.status}")
 print(f"イテレーション: {result.iterations_used}")
 ```
 
+### TaskManager API
+
+タスクのライフサイクルをステップ実行で管理できます：
+
+```python
+from pathlib import Path
+from endless8.config import EngineConfig
+from endless8.task_manager import TaskManager
+
+config = EngineConfig(
+    task="認証機能を実装する",
+    criteria=["テストが全パス"],
+    max_iterations=10,
+)
+tm = TaskManager(Path("."), config)
+tm.set_agents(intake_agent=..., execution_agent=..., summary_agent=..., judgment_agent=...)
+
+# タスク作成
+task_id = await tm.create()
+
+# 1フェーズずつ進める
+result = await tm.advance(task_id)  # CREATED -> INTAKE -> EXECUTING
+result = await tm.advance(task_id)  # EXECUTING -> SUMMARIZING -> JUDGING -> ...
+
+# ステータス確認
+status = await tm.status(task_id)
+print(f"フェーズ: {status.phase}, 完了: {status.is_complete}")
+
+# 外部評価結果を注入（hachimoku 等の外部ツールとの連携）
+await tm.inject_result(task_id, Path("review_result.json"))
+
+# 自動ループ実行（advance を完了まで繰り返す）
+result = await tm.run(task_id)
+```
+
 ### ストリーミング実行
 
 各イテレーションのサマリをストリーミングで取得できます：
@@ -86,7 +121,7 @@ e8 run -t "タスク" -c "条件" --project /path/to/project
 e8 run -t "タスク" -c "条件" --max-iterations 5
 ```
 
-### CLI オプション一覧
+### CLI オプション一覧（`e8 run`）
 
 | オプション | 短縮形 | 説明 |
 |-----------|--------|------|
@@ -99,6 +134,47 @@ e8 run -t "タスク" -c "条件" --max-iterations 5
 | `--verbose` | `-V` | 詳細な実行ログを表示（ツールコール・テキスト応答） |
 | `--command-timeout` | | コマンド条件のデフォルトタイムアウト秒（デフォルト: 30） |
 
+### ステップ実行と外部ツール連携
+
+タスクを1フェーズずつ実行し、外部ツールの評価結果を注入できます：
+
+```bash
+# タスクのステータスを確認（フェーズ・イテレーション）
+e8 status --task-id <TASK_ID> --project /path/to/project
+
+# JSON 形式で出力（スクリプトからの参照用）
+e8 status --task-id <TASK_ID> --json
+
+# 1フェーズ進める
+e8 advance <TASK_ID> --config config.yaml --project /path/to/project
+
+# 外部評価結果を注入
+e8 inject-result <TASK_ID> result.json --project /path/to/project
+```
+
+**外部ツール連携の例**（hachimoku 等のコードレビューツールとの併用）：
+
+```bash
+TASK_ID="20260323-143000"  # e8 run で生成されたタスクID
+
+for i in $(seq 1 10); do
+  # 外部ツールで評価
+  hachimoku --no-confirm docs/strategies/*.md || true
+
+  # 評価結果を注入
+  e8 inject-result "$TASK_ID" .hachimoku/reviews/files.jsonl
+
+  # 1イテレーション実行（execute → summary → judgment）
+  e8 advance "$TASK_ID" --config strategy-evaluation.yaml
+
+  # 完了チェック
+  if e8 status --task-id "$TASK_ID" --json | jq -e '.is_complete'; then
+    echo "Complete!"
+    exit 0
+  fi
+done
+```
+
 ## データストレージ
 
 endless8 はプロジェクトディレクトリに `.e8/` ディレクトリを作成して履歴とナレッジを保存します：
@@ -108,8 +184,11 @@ project/
 ├── .e8/
 │   └── tasks/
 │       └── <task-id>/
-│           ├── history.jsonl      # タスクの履歴
+│           ├── state.jsonl        # タスクの状態遷移履歴
+│           ├── history.jsonl      # タスクの実行履歴
 │           ├── knowledge.jsonl    # タスクのナレッジ
+│           ├── output.md          # 最新イテレーションの生出力
+│           ├── injected_result.json  # 外部評価結果（inject-result 時）
 │           └── logs/              # オプション: 生ログ
 ```
 
@@ -133,6 +212,7 @@ criteria:
 
 **動作仕様:**
 
+- コマンド条件は実行エージェントには渡されず、判定フェーズでのみ評価される（実行エージェントのコンテキスト枯渇を防止）
 - コマンド条件は各イテレーションの判定フェーズで、サマリ完了後・LLM判定前に順次実行される
 - コマンドは `working_directory`（デフォルト: プロセスの作業ディレクトリ）で実行される
   - CLI 使用時は `--project` オプションの値（デフォルト: カレントディレクトリ）が `working_directory` として設定される

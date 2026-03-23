@@ -5,6 +5,7 @@ from endless8.models.criteria import (
     CriterionInput,
     CriterionType,
     criteria_to_str_list,
+    filter_semantic_criteria,
 )
 from endless8.models.knowledge import Knowledge, KnowledgeConfidence, KnowledgeType
 from endless8.models.progress import ProgressEvent, ProgressEventType
@@ -20,6 +21,7 @@ from endless8.models.results import (
     LoopStatus,
     SemanticMetadata,
 )
+from endless8.models.state import StateTransition, TaskPhase
 from endless8.models.summary import (
     ExecutionSummary,
     KnowledgeEntry,
@@ -37,6 +39,7 @@ __all__ = [
     "CommandCriterion",
     "CriterionInput",
     "criteria_to_str_list",
+    "filter_semantic_criteria",
     # Results
     "IntakeStatus",
     "IntakeResult",
@@ -48,6 +51,9 @@ __all__ = [
     "JudgmentResult",
     "LoopStatus",
     "LoopResult",
+    # State
+    "TaskPhase",
+    "StateTransition",
     # Summary
     "KnowledgeEntry",
     "SummaryLLMOutput",

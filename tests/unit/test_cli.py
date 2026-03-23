@@ -1157,6 +1157,105 @@ class TestProgressCallbackEvents:
             assert "推奨アクション" in result.output
             assert "次のステップを実行してください" in result.output
 
+
+class TestAdvanceCommand:
+    """Tests for advance command."""
+
+    def test_advance_without_config_returns_error(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that advance without --config returns exit code 1."""
+        result = runner.invoke(
+            app, ["advance", "some-task-id", "--project", str(temp_dir)]
+        )
+        assert result.exit_code == 1
+        assert (
+            "config" in result.output.lower()
+            or "config" in (result.output or "").lower()
+        )
+
+    def test_advance_with_nonexistent_config_returns_error(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that advance with a missing config file returns exit code 1."""
+        result = runner.invoke(
+            app,
+            [
+                "advance",
+                "some-task-id",
+                "--config",
+                str(temp_dir / "nonexistent.yaml"),
+                "--project",
+                str(temp_dir),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "見つかりません" in result.output or "not" in result.output.lower()
+
+    def test_advance_with_invalid_config_returns_error(
+        self, runner: CliRunner, temp_dir: Path
+    ) -> None:
+        """Test that advance with invalid config YAML returns exit code 1."""
+        import yaml
+
+        config_file = temp_dir / "config.yaml"
+        # Missing required task/criteria fields
+        config_file.write_text(yaml.dump({"max_iterations": 5}))
+
+        result = runner.invoke(
+            app,
+            [
+                "advance",
+                "some-task-id",
+                "--config",
+                str(config_file),
+                "--project",
+                str(temp_dir),
+            ],
+        )
+        assert result.exit_code == 1
+        assert "不正" in result.output or "エラー" in result.output
+
+
+class TestInjectResultCommand:
+    """Tests for inject-result command."""
+
+    def test_inject_result_nonexistent_file(self, tmp_path: Path) -> None:
+        """Test that inject-result with a missing result file returns exit code 1."""
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            [
+                "inject-result",
+                "some-task",
+                "/nonexistent/file.json",
+                "--project",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 1
+
+    def test_inject_result_nonexistent_task(self, tmp_path: Path) -> None:
+        """Test that inject-result with a nonexistent task ID returns exit code 1."""
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result_file = tmp_path / "result.json"
+        result_file.write_text("{}")
+        result = runner.invoke(
+            app,
+            [
+                "inject-result",
+                "nonexistent-task",
+                str(result_file),
+                "--project",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 1
+
     def test_run_shows_history_path(self, runner: CliRunner, temp_dir: Path) -> None:
         """Test that run shows history path."""
         judgment = JudgmentResult(
@@ -1590,3 +1689,62 @@ class TestStatusCommandKnowledge:
         result = runner.invoke(app, ["status", "--project", str(temp_dir)])
         assert result.exit_code == 0
         assert "ナレッジエントリ: 0" in result.output
+
+
+class TestStatusWithTaskId:
+    """Tests for status command with --task-id option."""
+
+    def test_status_with_task_id_shows_phase(self, tmp_path: Path) -> None:
+        """--task-id で指定したタスクのフェーズが表示されること。"""
+        from typer.testing import CliRunner
+
+        from endless8.cli.main import app
+
+        runner = CliRunner()
+
+        # Setup: タスクディレクトリを作成（state.jsonl なし = CREATED状態）
+        task_dir = tmp_path / ".e8" / "tasks" / "test-task"
+        task_dir.mkdir(parents=True)
+
+        result = runner.invoke(
+            app,
+            ["status", "--project", str(tmp_path), "--task-id", "test-task"],
+        )
+        assert result.exit_code == 0
+        assert "created" in result.stdout.lower()
+
+    def test_status_with_task_id_json(self, tmp_path: Path) -> None:
+        """--json で JSON 出力されること。"""
+        import json
+
+        from typer.testing import CliRunner
+
+        from endless8.cli.main import app
+
+        runner = CliRunner()
+
+        task_dir = tmp_path / ".e8" / "tasks" / "test-task"
+        task_dir.mkdir(parents=True)
+
+        result = runner.invoke(
+            app,
+            ["status", "--project", str(tmp_path), "--task-id", "test-task", "--json"],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["task_id"] == "test-task"
+        assert data["phase"] == "created"
+
+    def test_status_with_nonexistent_task_id(self, tmp_path: Path) -> None:
+        """存在しないタスクIDでエラーになること。"""
+        from typer.testing import CliRunner
+
+        from endless8.cli.main import app
+
+        runner = CliRunner()
+
+        result = runner.invoke(
+            app,
+            ["status", "--project", str(tmp_path), "--task-id", "nonexistent"],
+        )
+        assert result.exit_code == 1

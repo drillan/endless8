@@ -5,6 +5,7 @@ Defines the discriminated union type for completion criteria:
 - CommandCriterion: command criterion (exit code evaluation)
 """
 
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import Annotated, Literal
 
@@ -78,3 +79,18 @@ def criteria_to_str_list(criteria: list[CriterionInput]) -> list[str]:
         list of str representations for each criterion
     """
     return [c if isinstance(c, str) else (c.description or c.command) for c in criteria]
+
+
+def filter_semantic_criteria(criteria: Sequence[CriterionInput]) -> list[str]:
+    """セマンティック条件のみをフィルタリングして返す。
+
+    コマンド条件は実行エージェントのコンテキストから除外し、
+    判定フェーズでのみ CommandExecutor が評価する。
+
+    Args:
+        criteria: CriterionInput のリスト（str | CommandCriterion）
+
+    Returns:
+        セマンティック条件（str）のみのリスト
+    """
+    return [c for c in criteria if isinstance(c, str)]

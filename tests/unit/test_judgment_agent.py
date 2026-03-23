@@ -736,14 +736,6 @@ class TestEngineMixedJudgmentFlow:
             judgment_agent=mock_judgment_agent,
         )
 
-        # Mock _run_command_criteria to return pre-computed results
-        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
-            return_value=(
-                [command_eval_met],
-                [command_criterion_result_met],
-            )
-        )
-
         task_input = TaskInput(
             task="テスト",
             criteria=[
@@ -755,7 +747,15 @@ class TestEngineMixedJudgmentFlow:
             max_iterations=1,
         )
 
-        result = await engine.run(task_input)
+        with patch(
+            "endless8.judgment.run_command_criteria",
+            new_callable=AsyncMock,
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            ),
+        ):
+            result = await engine.run(task_input)
 
         assert result.status == LoopStatus.MAX_ITERATIONS
         assert result.final_judgment is not None
@@ -804,13 +804,6 @@ class TestEngineMixedJudgmentFlow:
             judgment_agent=mock_judgment_agent,
         )
 
-        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
-            return_value=(
-                [command_eval_not_met],
-                [command_criterion_result_not_met],
-            )
-        )
-
         task_input = TaskInput(
             task="テスト",
             criteria=[
@@ -822,7 +815,15 @@ class TestEngineMixedJudgmentFlow:
             max_iterations=1,
         )
 
-        result = await engine.run(task_input)
+        with patch(
+            "endless8.judgment.run_command_criteria",
+            new_callable=AsyncMock,
+            return_value=(
+                [command_eval_not_met],
+                [command_criterion_result_not_met],
+            ),
+        ):
+            result = await engine.run(task_input)
 
         assert result.status == LoopStatus.MAX_ITERATIONS
         assert result.final_judgment is not None
@@ -867,13 +868,6 @@ class TestEngineMixedJudgmentFlow:
             judgment_agent=mock_judgment_agent,
         )
 
-        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
-            return_value=(
-                [command_eval_met],
-                [command_criterion_result_met],
-            )
-        )
-
         task_input = TaskInput(
             task="テスト",
             criteria=[
@@ -885,7 +879,15 @@ class TestEngineMixedJudgmentFlow:
             max_iterations=1,
         )
 
-        result = await engine.run(task_input)
+        with patch(
+            "endless8.judgment.run_command_criteria",
+            new_callable=AsyncMock,
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            ),
+        ):
+            result = await engine.run(task_input)
 
         assert result.status == LoopStatus.COMPLETED
         assert result.final_judgment is not None
@@ -931,13 +933,6 @@ class TestEngineMixedJudgmentFlow:
             judgment_agent=mock_judgment_agent,
         )
 
-        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
-            return_value=(
-                [command_eval_met],
-                [command_criterion_result_met],
-            )
-        )
-
         task_input = TaskInput(
             task="テスト",
             criteria=[
@@ -949,7 +944,15 @@ class TestEngineMixedJudgmentFlow:
             max_iterations=1,
         )
 
-        await engine.run(task_input)
+        with patch(
+            "endless8.judgment.run_command_criteria",
+            new_callable=AsyncMock,
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            ),
+        ):
+            await engine.run(task_input)
 
         # Verify JudgmentAgent received command_results in context
         call_args = mock_judgment_agent.run.call_args
@@ -985,13 +988,6 @@ class TestEngineMixedJudgmentFlow:
             judgment_agent=mock_judgment_agent,
         )
 
-        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
-            return_value=(
-                [command_eval_met],
-                [command_criterion_result_met],
-            )
-        )
-
         task_input = TaskInput(
             task="テスト",
             criteria=[
@@ -1002,7 +998,15 @@ class TestEngineMixedJudgmentFlow:
             max_iterations=1,
         )
 
-        result = await engine.run(task_input)
+        with patch(
+            "endless8.judgment.run_command_criteria",
+            new_callable=AsyncMock,
+            return_value=(
+                [command_eval_met],
+                [command_criterion_result_met],
+            ),
+        ):
+            result = await engine.run(task_input)
 
         # LLM judgment agent should NOT be called
         mock_judgment_agent.run.assert_not_called()
@@ -1062,10 +1066,6 @@ class TestEngineMixedJudgmentFlow:
             summary_agent=mock_summary_agent,
             judgment_agent=mock_judgment_agent,
         )
-        engine._run_command_criteria = AsyncMock(  # type: ignore[method-assign]
-            return_value=([command_eval], [command_cr])
-        )
-
         task_input = TaskInput(
             task="テスト",
             criteria=[
@@ -1077,7 +1077,12 @@ class TestEngineMixedJudgmentFlow:
             max_iterations=1,
         )
 
-        result = await engine.run(task_input)
+        with patch(
+            "endless8.judgment.run_command_criteria",
+            new_callable=AsyncMock,
+            return_value=([command_eval], [command_cr]),
+        ):
+            result = await engine.run(task_input)
 
         assert result.final_judgment is not None
         evals = result.final_judgment.evaluations
