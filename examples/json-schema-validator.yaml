@@ -1,0 +1,68 @@
+# JSON スキーマバリデータータスクの設定ファイル例
+# 使用方法: e8 run --config examples/json-schema-validator.yaml --project /path/to/empty-dir
+#
+# コマンド条件のみのパターンですが、コマンド数が多い実践的な例です。
+# LLM 判定は完全に省略され、すべてコマンドの終了コードで判定されます。
+# criteria フィルタリングにより、実行エージェントはこれらのコマンドを
+# 知らず、タスクの説明だけに集中して実装を進められます。
+
+task: |
+  JSON スキーマバリデーターモジュールを実装してください。
+
+  要件:
+  - validator.py に以下の関数を実装:
+    - validate(data: dict, schema: dict) -> list[str]: バリデーションエラーのリスト（空なら有効）
+    - is_valid(data: dict, schema: dict) -> bool: 有効なら True
+  - 対応するスキーマ:
+    - "type": "string" | "int" | "float" | "bool" | "list" | "dict"
+    - "required": true | false（デフォルト false）
+    - "min_length" / "max_length": 文字列・リストの長さ制限
+  - 外部ライブラリ不使用（標準ライブラリのみ）
+  - tests/test_validator.py にテストを作成
+  - pyproject.toml を作成し、uv で実行可能にすること
+
+criteria:
+  - type: command
+    command: "test -f validator.py && test -f tests/test_validator.py"
+    description: "ソースファイルとテストファイルが存在する"
+  - type: command
+    command: "uv run pytest tests/test_validator.py -v"
+    description: "テストが全パス"
+    timeout: 60
+  - type: command
+    command: >
+      uv run python -c "
+      from validator import validate, is_valid
+      schema = {'name': {'type': 'string', 'required': True}, 'age': {'type': 'int'}}
+      assert is_valid({'name': 'Alice', 'age': 30}, schema)
+      assert not is_valid({'age': 30}, schema)
+      errors = validate({'age': 'not_int'}, schema)
+      assert len(errors) >= 1
+      "
+    description: "基本的なバリデーションが動作する"
+    timeout: 10
+  - type: command
+    command: >
+      uv run python -c "
+      from validator import validate
+      schema = {'tags': {'type': 'list', 'min_length': 1, 'max_length': 5}}
+      assert validate({'tags': []}, schema)
+      assert not validate({'tags': ['a', 'b']}, schema)
+      "
+    description: "min_length / max_length バリデーションが動作する"
+    timeout: 10
+  - type: command
+    command: "uv run python -c \"import validator, inspect; src=inspect.getsource(validator); assert 'import json' not in src or True; assert 'jsonschema' not in src, 'External schema library not allowed'\""
+    description: "外部スキーマライブラリを使用していない"
+    timeout: 10
+
+max_iterations: 8
+command_timeout: 30
+
+claude_options:
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Read"
+    - "Write"

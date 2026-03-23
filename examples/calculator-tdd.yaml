@@ -1,0 +1,60 @@
+# TDD 電卓タスクの設定ファイル例
+# 使用方法: e8 run --config examples/calculator-tdd.yaml --project /path/to/empty-dir
+#
+# このタスクは多数のコマンド条件と意味的条件を混在させた例です。
+# criteria フィルタリングにより、実行エージェントは「テスト全パス」
+# 「ruff check」等のコマンド条件を見ないため、コンテキストを温存できます。
+#
+# 単独で実行可能: 空のディレクトリで e8 run するだけで動作します。
+
+task: |
+  Python で電卓モジュールを TDD で実装してください。
+
+  要件:
+  - calculator.py に Calculator クラスを実装
+  - 対応する演算: add, subtract, multiply, divide
+  - ゼロ除算時は ZeroDivisionError を送出（カスタムメッセージ付き）
+  - 計算履歴を保持する history プロパティ（list[str] 形式）
+  - tests/test_calculator.py にテストを作成（pytest 使用）
+  - pyproject.toml を作成し、uv で実行可能にすること
+
+criteria:
+  # 意味的条件（実行エージェントに渡される）
+  - "Calculator クラスが四則演算をサポートしている"
+  - "計算履歴が正しく記録されている（例: '3 + 5 = 8' の形式）"
+
+  # コマンド条件（判定フェーズでのみ評価）
+  - type: command
+    command: "test -f calculator.py && test -f tests/test_calculator.py"
+    description: "ソースファイルとテストファイルが存在する"
+  - type: command
+    command: "uv run pytest tests/test_calculator.py -v"
+    description: "テストが全パス"
+    timeout: 60
+  - type: command
+    command: "uv run python -c \"from calculator import Calculator; c = Calculator(); assert c.divide(10, 0) is None\" 2>&1 | grep -q ZeroDivisionError"
+    description: "ゼロ除算で ZeroDivisionError が送出される"
+    timeout: 10
+  - type: command
+    command: "uv run python -c \"from calculator import Calculator; c = Calculator(); c.add(3, 5); assert len(c.history) == 1\""
+    description: "計算履歴が記録される"
+    timeout: 10
+
+max_iterations: 5
+command_timeout: 30
+
+prompts:
+  append_system_prompt: |
+    TDD の手順に従ってください:
+    1. まずテストを書く
+    2. テストが失敗することを確認
+    3. 最小限の実装でテストを通す
+    4. リファクタリング
+
+claude_options:
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Read"
+    - "Write"

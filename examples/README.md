@@ -32,8 +32,17 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 | `primes-quality-gate.yaml` | 素数生成タスク（パフォーマンス基準 + mypy strict + テスト + 意味的条件の複合例） |
 | `hachimoku-quality-gate.yaml` | hachimoku 品質ゲートタスク（スコアチェック連携） |
 | `check_hachimoku_score.py` | hachimoku レビュースコアチェッカー（コマンド条件用） |
+| `markdown-linter.yaml` | Markdown ドキュメント生成タスク（多数のコマンド条件で構造を検証） |
+| `calculator-tdd.yaml` | TDD 電卓タスク（混在条件 + TDD ワークフロー） |
+| `json-schema-validator.yaml` | JSON バリデータータスク（コマンド条件のみ、多数の動作検証） |
 
-## CLI オプション一覧
+## CLI コマンド一覧
+
+### `e8 run` — タスクを自動実行
+
+```bash
+e8 run --config examples/calculator-tdd.yaml --project /tmp/calc
+```
 
 | オプション | 短縮形 | 説明 |
 |-----------|--------|------|
@@ -45,6 +54,45 @@ e8 run --config examples/api-implementation.yaml --max-iterations 20
 | `--resume` | `-r` | タスクIDを指定して再開 |
 | `--verbose` | `-V` | 詳細な実行ログを表示 |
 | `--command-timeout` | | コマンド条件のデフォルトタイムアウト秒（デフォルト: 30） |
+
+### `e8 advance` — タスクを1ステップ進める
+
+```bash
+e8 advance <TASK_ID> --config config.yaml --project /path/to/project
+```
+
+`advance` は1回の呼び出しで以下のいずれかを実行します:
+- CREATED → INTAKE → EXECUTING（受付 + 実行開始）
+- EXECUTING → SUMMARIZING → JUDGING → 次のフェーズ（実行 + サマリ + 判定）
+
+外部ツールとの連携時に、タスクを段階的に進めたい場合に使用します。
+
+### `e8 status` — タスクの状態を確認
+
+```bash
+# タスク一覧の概要
+e8 status
+
+# 特定タスクの詳細
+e8 status --task-id <TASK_ID>
+
+# JSON 出力（スクリプトからの参照用）
+e8 status --task-id <TASK_ID> --json
+```
+
+### `e8 inject-result` — 外部評価結果を注入
+
+```bash
+e8 inject-result <TASK_ID> result.json --project /path/to/project
+```
+
+外部ツール（hachimoku 等）の評価結果をタスクディレクトリに保存します。
+
+### `e8 list` — タスク一覧を表示
+
+```bash
+e8 list --project /path/to/project
+```
 
 ## 設定オプション一覧
 
@@ -111,6 +159,10 @@ criteria:
     description: "全テストがパス"     # 任意: 人間向けの説明
     timeout: 120                      # 任意: コマンド固有のタイムアウト（秒）
 ```
+
+### Criteria フィルタリング
+
+コマンド条件は**実行エージェントには渡されません**。実行エージェントはセマンティック条件のみを見て作業に集中し、コマンド条件は判定フェーズでのみ評価されます。これにより、実行エージェントが評価用コマンド（`pytest`, `mypy` 等）を自力実行してターン数やコンテキストを浪費する問題を防ぎます。
 
 ### 混在
 

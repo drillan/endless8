@@ -1,0 +1,52 @@
+# Markdown リンタータスクの設定ファイル例
+# 使用方法: e8 run --config examples/markdown-linter.yaml --project /path/to/project
+#
+# このタスクは criteria フィルタリングの恩恵を示す例です。
+# コマンド条件（grep, wc 等）が多数含まれていますが、実行エージェントには
+# セマンティック条件のみが渡されるため、エージェントが評価コマンドを
+# 自力実行してコンテキストを消費する問題が発生しません。
+#
+# 前提: 作業ディレクトリに Markdown ファイルが存在すること
+
+task: |
+  docs/ ディレクトリに技術ドキュメントを作成してください。
+
+  要件:
+  - docs/architecture.md: システムのアーキテクチャ概要（500文字以上）
+  - docs/getting-started.md: セットアップ手順（3ステップ以上）
+  - docs/api-reference.md: API リファレンス（関数3つ以上を記述）
+  - 各ファイルにはタイトル（h1）とセクション（h2以上が2つ以上）を含むこと
+  - コードブロックには言語指定を付けること
+
+criteria:
+  # 意味的条件（実行エージェントに渡される）
+  - "ドキュメントの内容が技術的に正確で、読者にとって有用である"
+  - "コード例が実際に動作しそうな現実的な内容である"
+
+  # コマンド条件（判定フェーズでのみ評価、実行エージェントには見えない）
+  - type: command
+    command: "test -f docs/architecture.md && test -f docs/getting-started.md && test -f docs/api-reference.md"
+    description: "3つのドキュメントファイルが存在する"
+
+  - type: command
+    command: "wc -m docs/architecture.md | awk '{if ($1 >= 500) exit 0; else exit 1}'"
+    description: "architecture.md が500文字以上"
+
+  - type: command
+    command: "grep -c '^## ' docs/getting-started.md | awk '{if ($1 >= 2) exit 0; else exit 1}'"
+    description: "getting-started.md にh2セクションが2つ以上"
+
+  - type: command
+    command: "grep -cP '^```\\w+' docs/api-reference.md | awk '{if ($1 >= 1) exit 0; else exit 1}'"
+    description: "api-reference.md に言語指定付きコードブロックがある"
+
+max_iterations: 5
+
+claude_options:
+  allowed_tools:
+    - "Bash"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Read"
+    - "Write"
